@@ -9,13 +9,13 @@ type LiveSource = {
   source: "OFFICIAL";
 };
 
-type SourceConfig = { organization: string; category: string; url: string };
+type SourceConfig = { organization: string; category: string; url: string; feedUrl?: string };
 
 export const LIVE_SOURCES: SourceConfig[] = [
-  { organization: "UPSC", category: "Central Government", url: "https://www.upsc.gov.in/" },
+  { organization: "UPSC", category: "Central Government", url: "https://www.upsc.gov.in/", feedUrl: "https://www.upsc.gov.in/recruitment/recruitment-test/notices" },
   { organization: "Staff Selection Commission", category: "SSC", url: "https://ssc.gov.in/" },
   { organization: "Employment News", category: "Government Jobs", url: "https://employmentnews.gov.in/newemp/careers.aspx" },
-  { organization: "IBPS", category: "Banking", url: "https://www.ibps.in/index.php/recruitment/" },
+  { organization: "IBPS", category: "Banking", url: "https://www.ibps.in/index.php/recruitment/", feedUrl: "https://www.ibps.in/" },
   { organization: "National Career Service", category: "Government Jobs", url: "https://ncs.gov.in/" },
   { organization: "Railway Recruitment Boards", category: "Railway", url: "https://www.rrbapply.gov.in/" },
   { organization: "Indian Railways", category: "Railway", url: "https://indianrailways.gov.in/" },
@@ -105,7 +105,7 @@ const extractLinks = (html: string, source: SourceConfig): LiveSource[] => {
 
 export async function fetchLiveSourceNotices() {
   const settled = await Promise.allSettled(LIVE_SOURCES.map(async source => {
-    const response = await fetch(source.url, {
+    const response = await fetch(source.feedUrl ?? source.url,
       headers: { "user-agent": "NaukriMitra/1.0 (+https://rojgaarmitra.vercel.app)" },
       signal: AbortSignal.timeout(8000),
       cache: "no-store",
