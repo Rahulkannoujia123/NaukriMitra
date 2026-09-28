@@ -121,6 +121,17 @@ model Job {
   postName String
   description String?
   vacancy Int?
+  applicationFee Int?
+  feeExemption String?
+  selectionProcess String?
+  examPattern String?
+  applicationMode String?
+  domicileRequirement String?
+  nationalityRequirement String?
+  physicalRequirements String?
+  genderRequirement String?
+  vacancyBreakdown Json?
+  searchText String?
   salaryMin Int?
   salaryMax Int?
   salaryText String?
@@ -150,6 +161,7 @@ model Job {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   qualifications JobQualification[]
+  vacancyCategories JobVacancyCategory[]
   documents JobDocument[]
   updates JobUpdate[]
   savedBy SavedJob[]
@@ -160,6 +172,19 @@ model Job {
   @@index([verificationStatus, lastVerifiedAt])
   @@index([organization, postName])
   @@index([recruitmentKey])
+}
+
+model JobVacancyCategory {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+  jobId String @db.ObjectId
+  category String
+  postName String?
+  vacancy Int?
+  gender String?
+  notes String?
+  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  @@index([jobId, category])
+  @@index([category, vacancy])
 }
 
 model JobQualification {
@@ -312,9 +337,27 @@ model SourceSnapshot {
   extractedFields String[] @default([])
   unverifiedFields String[] @default([])
   retrievalNote String?
+  contentHash String?
+  previousContentHash String?
+  changeSummary String?
   snapshot Json
   createdAt DateTime @default(now())
   @@unique([sourceUrl, recordType, noticeTitle])
   @@index([sourceOrganization, observedAt])
   @@index([verificationStatus, observedAt])
+  @@index([sourceOrganization, contentHash])
+}
+
+model SourceIngestionRun {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+  sourceOrganization String
+  sourceUrl String
+  startedAt DateTime @default(now())
+  finishedAt DateTime?
+  status String
+  httpStatus Int?
+  contentHash String?
+  changed Boolean @default(false)
+  errorMessage String?
+  @@index([sourceOrganization, startedAt])
 }
