@@ -69,7 +69,7 @@ const asyncRoute = (fn: (req: AuthRequest, res: Response) => Promise<unknown>) =
 const accountInput = z.object({ email: z.string().trim().email().max(254).transform(v => v.toLowerCase()), password: z.string().min(12).max(128) });
 const jobInput = z.object({
   slug: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(120), organization: z.string().trim().min(2).max(180), postName: z.string().trim().min(2).max(180),
-  vacancy: z.number().int().nonnegative().nullable().optional(), salaryText: z.string().max(100).nullable().optional(), salaryMin: z.number().int().nonnegative().nullable().optional(), salaryMax: z.number().int().nonnegative().nullable().optional(),
+  vacancy: z.number().int().nonnegative().nullable().optional(), applicationFee: z.number().int().nonnegative().nullable().optional(), feeExemption: z.string().max(500).nullable().optional(), selectionProcess: z.string().max(3000).nullable().optional(), examPattern: z.string().max(3000).nullable().optional(), applicationMode: z.string().max(120).nullable().optional(), domicileRequirement: z.string().max(1000).nullable().optional(), nationalityRequirement: z.string().max(500).nullable().optional(), physicalRequirements: z.string().max(3000).nullable().optional(), genderRequirement: z.string().max(120).nullable().optional(), vacancyBreakdown: z.record(z.string(), z.number().int().nonnegative()).nullable().optional(), searchText: z.string().max(5000).nullable().optional(), salaryText: z.string().max(100).nullable().optional(), salaryMin: z.number().int().nonnegative().nullable().optional(), salaryMax: z.number().int().nonnegative().nullable().optional(),
   ageMin: z.number().int().nonnegative().nullable().optional(), ageMax: z.number().int().positive().nullable().optional(), ageCutoffDate: z.string().datetime().nullable().optional(), experienceMinMonths: z.number().int().nonnegative().nullable().optional(),
   applicationStart: z.string().datetime().nullable().optional(), applicationEnd: z.string().datetime().nullable().optional(), examDate: z.string().datetime().nullable().optional(), location: z.array(z.string().max(100)).max(100).optional(), states: z.array(z.string().max(100)).max(100).optional(), departments: z.array(z.string().max(100)).max(100).optional(), jobType: z.string().max(80).nullable().optional(), exam: z.string().max(180).nullable().optional(),
   sourceUrl: httpUrl.nullable().optional(), sourceOrganization: z.string().max(180).nullable().optional(), notificationUrl: httpUrl.nullable().optional(), applicationUrl: httpUrl.nullable().optional(), notificationDate: z.string().datetime().nullable().optional(),
@@ -150,15 +150,19 @@ app.get("/api/v1/jobs", asyncRoute(async (req, res) => {
   const salaryMin = Number(req.query.salaryMin);
   const experienceMonths = Number(req.query.experienceMonths);
   const vacancyMin = Number(req.query.vacancyMin);
+  const category = String(req.query.category ?? "").trim().slice(0, 60);
+  const percentage = Number(req.query.percentage);
   const closeWithinDays = Number(req.query.closeWithinDays);
   const filters: Prisma.JobWhereInput[] = [];
   if (Number.isFinite(salaryMin) && salaryMin > 0) filters.push({ OR: [{ salaryMax: { gte: salaryMin } }, { salaryMax: null, salaryMin: { gte: salaryMin } }] });
   if (Number.isFinite(experienceMonths) && experienceMonths >= 0) filters.push({ OR: [{ experienceMinMonths: null }, { experienceMinMonths: { lte: experienceMonths } }] });
   if (Number.isInteger(age) && age >= 14 && age <= 100) filters.push({ AND: [{ OR: [{ ageMin: null }, { ageMin: { lte: age } }] }, { OR: [{ ageMax: null }, { ageMax: { gte: age } }] }] });
+  if (category) filters.push({ vacancyCategories: { some: { category: { equals: category, mode: "insensitive" } } } });
+  if (Number.isFinite(percentage) && percentage >= 0) filters.push({ qualifications: { some: { OR: [{ minimumPercentage: null }, { minimumPercentage: { lte: percentage } }] } } });
   if (Number.isFinite(closeWithinDays) && closeWithinDays > 0) filters.push({ applicationEnd: { gte: new Date(), lte: new Date(Date.now() + Math.min(closeWithinDays, 365) * 86_400_000) } });
   const where: Prisma.JobWhereInput = {
     ...activeJobWhere(),
-    ...(query ? { OR: [{ organization: { contains: query, mode: "insensitive" } }, { postName: { contains: query, mode: "insensitive" } }, { exam: { contains: query, mode: "insensitive" } }] } : {}),
+    ...(query ? { AND: [{ OR: [{ organization: { contains: query, mode: "insensitive" } }, { postName: { contains: query, mode: "insensitive" } }, { exam: { contains: query, mode: "insensitive" } }, { searchText: { contains: query, mode: "insensitive" } }] }] } : {}),
     ...(qualification ? { qualifications: { some: { qualification: { contains: qualification, mode: "insensitive" } } } } : {}),
     ...(state ? { states: { has: state } } : {}),
     ...(district ? { location: { has: district } } : {}),
@@ -166,12 +170,13 @@ app.get("/api/v1/jobs", asyncRoute(async (req, res) => {
     ...(jobType ? { jobType: { equals: jobType, mode: "insensitive" } } : {}),
     ...(exam ? { exam: { contains: exam, mode: "insensitive" } } : {}),
     ...(Number.isFinite(vacancyMin) && vacancyMin > 0 ? { vacancy: { gte: vacancyMin } } : {}),
+    ...(query ? { searchText: { contains: query, mode: "insensitive" } } : {}),
     ...(filters.length ? { AND: filters } : {}),
   };
   const jobs = await prisma.job.findMany({
     where,
     orderBy: [{ applicationEnd: "asc" }, { publishedAt: "desc" }], skip: (page - 1) * pageSize, take: pageSize,
-    select: { id: true, slug: true, organization: true, postName: true, vacancy: true, salaryText: true, salaryMin: true, salaryMax: true, applicationStart: true, applicationEnd: true, examDate: true, location: true, sourceUrl: true, sourceOrganization: true, notificationUrl: true, applicationUrl: true, lastVerifiedAt: true, verificationStatus: true, sourceKind: true, qualifications: true },
+    select: { id: true, slug: true, organization: true, postName: true, vacancy: true, applicationFee: true, feeExemption: true, selectionProcess: true, examPattern: true, applicationMode: true, domicileRequirement: true, nationalityRequirement: true, physicalRequirements: true, genderRequirement: true, vacancyBreakdown: true, salaryText: true, salaryMin: true, salaryMax: true, applicationStart: true, applicationEnd: true, examDate: true, location: true, sourceUrl: true, sourceOrganization: true, notificationUrl: true, applicationUrl: true, lastVerifiedAt: true, verificationStatus: true, sourceKind: true, qualifications: true },
   });
   res.set("Cache-Control", "public, max-age=30, stale-while-revalidate=60");
   return res.json({ data: jobs, page, pageSize });
@@ -247,7 +252,7 @@ app.post("/api/v1/assistant", asyncRoute(async (req, res) => {
     data,
   });
 }));
-const eligibilityInput = z.object({ dateOfBirth: z.string().datetime().nullable().optional(), qualification: z.string().max(100).nullable().optional(), degree: z.string().max(160).nullable().optional(), branch: z.string().max(160).nullable().optional(), passingYear: z.number().int().nullable().optional(), category: z.string().max(60).nullable().optional(), state: z.string().max(100).nullable().optional(), experienceMonths: z.number().int().min(0).nullable().optional() });
+const eligibilityInput = z.object({ dateOfBirth: z.string().datetime().nullable().optional(), qualification: z.string().max(100).nullable().optional(), degree: z.string().max(160).nullable().optional(), branch: z.string().max(160).nullable().optional(), passingYear: z.number().int().nullable().optional(), percentage: z.number().min(0).max(100).nullable().optional(), gender: z.string().max(40).nullable().optional(), category: z.string().max(60).nullable().optional(), state: z.string().max(100).nullable().optional(), experienceMonths: z.number().int().min(0).nullable().optional() });
 app.post("/api/v1/jobs/:id/eligibility", asyncRoute(async (req, res) => {
   const parsed = eligibilityInput.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "INVALID_INPUT", details: parsed.error.flatten() });
@@ -268,6 +273,21 @@ app.get("/api/v1/me/matches", auth, asyncRoute(async (req, res) => {
     else if (result.status === "CHECK_MANUALLY") checkManually.push({ job, reasons: result.reasons });
   }
   return res.json({ eligible, checkManually, profileRequired: false });
+}));
+
+app.get("/api/v1/me/recommendations", auth, asyncRoute(async (req, res) => {
+  const profile = await prisma.candidateProfile.findUnique({ where: { userId: req.claims!.sub } });
+  if (!profile) return res.json({ profileRequired: true, data: [] });
+  const jobs = await prisma.job.findMany({ where: activeJobWhere(), include: { qualifications: true, documents: true, vacancyCategories: true }, orderBy: [{ applicationEnd: "asc" }, { publishedAt: "desc" }], take: 150 });
+  const data = jobs.map(job => {
+    const result = assessEligibility(profile, job);
+    const locationMatch = profile.preferredLocations.length === 0 || job.location.some(x => profile.preferredLocations.some(p => x.toLocaleLowerCase("en-IN").includes(p.toLocaleLowerCase("en-IN"))));
+    const departmentMatch = profile.preferredDepartments.length === 0 || job.departments.some(x => profile.preferredDepartments.some(p => x.toLocaleLowerCase("en-IN").includes(p.toLocaleLowerCase("en-IN"))));
+    const salaryMatch = profile.salaryMin == null || job.salaryMax == null || job.salaryMax >= profile.salaryMin;
+    const score = (result.status === "ELIGIBLE" ? 60 : result.status === "CHECK_MANUALLY" ? 30 : 0) + (locationMatch ? 15 : 0) + (departmentMatch ? 15 : 0) + (salaryMatch ? 10 : 0);
+    return { job, eligibility: result, score, matchReasons: [result.status === "ELIGIBLE" ? "Recorded eligibility criteria match" : result.status === "CHECK_MANUALLY" ? "Some conditions need manual review" : "Recorded eligibility criteria do not match", locationMatch ? "Preferred location matches or no location preference set" : "Preferred location does not match", departmentMatch ? "Preferred department matches or no department preference set" : "Preferred department does not match", salaryMatch ? "Salary preference is met or salary is not recorded" : "Salary preference is not met"] };
+  }).filter(x => x.eligibility.status !== "NOT_ELIGIBLE").sort((a,b) => b.score-a.score).slice(0, 30);
+  return res.json({ profileRequired: false, data });
 }));
 
 app.get("/api/v1/me/saved-jobs", auth, asyncRoute(async (req, res) => {
