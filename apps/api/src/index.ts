@@ -51,11 +51,10 @@ const verifyMutationOrigin = (req: Request, res: Response, next: NextFunction) =
 };
 const httpUrl = z.string().url().refine(value => { const protocol = new URL(value).protocol; return protocol === "http:" || protocol === "https:"; }, "Use an HTTP or HTTPS URL.");
 const normalizeKeyPart = (value?: string | null) => (value ?? "").trim().toLocaleLowerCase("en-IN").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-const buildRecruitmentKey = (input: { organization: string; postName: string; notificationDate?: Date | null; applicationEnd?: Date | null }) => [
+const buildRecruitmentKey = (input: { organization: string; postName: string; notificationDate?: Date | null; applicationStart?: Date | null }) => [
   normalizeKeyPart(input.organization),
   normalizeKeyPart(input.postName),
-  input.notificationDate ? input.notificationDate.toISOString().slice(0, 10) : "",
-  input.applicationEnd ? input.applicationEnd.toISOString().slice(0, 10) : "",
+  input.notificationDate ? input.notificationDate.toISOString().slice(0, 10) : input.applicationStart ? input.applicationStart.toISOString().slice(0, 10) : "",
 ].filter(Boolean).join("|");
 const activeJobWhere = (extra: Prisma.JobWhereInput = {}): Prisma.JobWhereInput => ({
   status: "PUBLISHED",
@@ -606,7 +605,7 @@ app.post("/api/v1/admin/jobs", auth, requireRole(...editors), verifyMutationOrig
   if (!parsed.success) return res.status(400).json({ error: "INVALID_INPUT", details: parsed.error.flatten() });
   const { qualifications = [], vacancyCategories = [], documents = [], ...fields } = parsed.data;
   const normalizedDates = { ageCutoffDate: fields.ageCutoffDate ? new Date(fields.ageCutoffDate) : null, applicationStart: fields.applicationStart ? new Date(fields.applicationStart) : null, applicationEnd: fields.applicationEnd ? new Date(fields.applicationEnd) : null, examDate: fields.examDate ? new Date(fields.examDate) : null, notificationDate: fields.notificationDate ? new Date(fields.notificationDate) : null };
-  const recruitmentKey = buildRecruitmentKey({ organization: fields.organization, postName: fields.postName, notificationDate: normalizedDates.notificationDate, applicationEnd: normalizedDates.applicationEnd });
+  const recruitmentKey = buildRecruitmentKey({ organization: fields.organization, postName: fields.postName, notificationDate: normalizedDates.notificationDate, applicationStart: normalizedDates.applicationStart });
   if (recruitmentKey) {
     const duplicate = await prisma.job.findFirst({ where: { recruitmentKey, status: { not: "ARCHIVED" } }, select: { id: true, slug: true, status: true } });
     if (duplicate) return res.status(409).json({ error: "DUPLICATE_RECRUITMENT", message: "A similar recruitment already exists.", existing: duplicate });
@@ -628,8 +627,8 @@ app.patch("/api/v1/admin/jobs/:id", auth, requireRole(...editors), verifyMutatio
   const nextOrganization = fields.organization ?? before.organization;
   const nextPostName = fields.postName ?? before.postName;
   const nextNotificationDate = fields.notificationDate !== undefined ? (fields.notificationDate ? new Date(fields.notificationDate) : null) : before.notificationDate;
-  const nextApplicationEnd = fields.applicationEnd !== undefined ? (fields.applicationEnd ? new Date(fields.applicationEnd) : null) : before.applicationEnd;
-  const recruitmentKey = buildRecruitmentKey({ organization: nextOrganization, postName: nextPostName, notificationDate: nextNotificationDate, applicationEnd: nextApplicationEnd });
+  const nextApplicationStart = fields.applicationStart !== undefined ? (fields.applicationStart ? new Date(fields.applicationStart) : null) : before.applicationStart;
+  const recruitmentKey = buildRecruitmentKey({ organization: nextOrganization, postName: nextPostName, notificationDate: nextNotificationDate, applicationStart: nextApplicationStart });
   if (recruitmentKey && recruitmentKey !== before.recruitmentKey) {
     const duplicate = await prisma.job.findFirst({ where: { recruitmentKey, id: { not: before.id }, status: { not: "ARCHIVED" } }, select: { id: true, slug: true, status: true } });
     if (duplicate) return res.status(409).json({ error: "DUPLICATE_RECRUITMENT", message: "A similar recruitment already exists.", existing: duplicate });
