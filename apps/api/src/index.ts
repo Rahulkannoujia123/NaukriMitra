@@ -84,6 +84,7 @@ async function persistRefreshToken(user: { id: string; role: Role }, res: Respon
   res.cookie("ns_refresh", token, refreshCookieOptions);
 }
 
+app.get("/", (_req, res) => res.json({ name: "NaukriMitra API", status: "ok", health: "/api/v1/health" }));
 app.get("/api/v1/health", (_req, res) => res.json({ status: "ok" }));
 app.post("/api/v1/auth/register", verifyMutationOrigin, asyncRoute(async (req, res) => {
   const parsed = accountInput.safeParse(req.body);
