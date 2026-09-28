@@ -1,4 +1,4 @@
-# NaukriSetu
+# NaukriMitra
 
 Personalized government-job discovery: show candidates jobs they may qualify for, explain why, and link back to official sources.
 
