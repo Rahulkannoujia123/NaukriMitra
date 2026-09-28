@@ -1,0 +1,184 @@
+{
+  "dataset": "central-recruitment-official-source-intake",
+  "collectedAt": "2026-09-28T00:00:00.000Z",
+  "scope": "Central recruitment sources only",
+  "recordPolicy": "Source listings only. These are not publishable job records until the linked notification is reviewed and missing fields are verified.",
+  "sources": [
+    {
+      "sourceOrganization": "Railway Recruitment Boards",
+      "sourceUrl": "https://www.rrbapply.gov.in/",
+      "lastCheckedAt": "2026-09-28T00:00:00.000Z",
+      "sourceKind": "OFFICIAL",
+      "observations": [
+        {
+          "title": "CEN No. 05/2026 - Recruitment of Paramedical Categories",
+          "recordType": "RECRUITMENT_NOTICE",
+          "publishedAt": "2026-09-15",
+          "detailUrl": "https://www.rrbapply.gov.in/assets/forms/CEN_05_2026_PM.pdf",
+          "applicationUrl": "https://www.rrbapply.gov.in/",
+          "applicationStart": "2026-09-15T00:00:00.000Z",
+          "applicationEnd": "2026-10-14T23:59:00.000Z",
+          "verificationStatus": "REVIEW_REQUIRED",
+          "extractedFields": ["title", "application start", "application closing date"],
+          "unverifiedFields": ["individual post names", "vacancies", "salary", "qualification", "age criteria", "exam date"],
+          "retrievalNote": "Official landing page showed the application window. The PDF was not machine-extractable in this pass; review it before creating or publishing job records."
+        }
+      ]
+    },
+    {
+      "sourceOrganization": "Institute of Banking Personnel Selection",
+      "sourceUrl": "https://www.ibps.in/index.php/rural-bank-xv/",
+      "lastCheckedAt": "2026-09-28T00:00:00.000Z",
+      "sourceKind": "OFFICIAL",
+      "observations": [
+        {
+          "title": "Corrigendum dated 25.09.2026 in connection with CRP-RRBs-XV",
+          "recordType": "CORRIGENDUM",
+          "publishedAt": "2026-09-25",
+          "detailUrl": "https://www.ibps.in/wp-content/uploads/Corrigendum-CRP-RRBs-XV_25.09.2026.pdf",
+          "verificationStatus": "REVIEW_REQUIRED",
+          "extractedFields": ["title", "publication date", "official PDF URL"],
+          "unverifiedFields": ["changed conditions", "application window", "post-wise vacancies"],
+          "retrievalNote": "Review the PDF and apply changes to the underlying notice only after field-level comparison."
+        },
+        {
+          "title": "Updated Vacancies as on 25.09.2026 for Common Recruitment Process for CRP-RRBs-XV",
+          "recordType": "VACANCY_UPDATE",
+          "publishedAt": "2026-09-25",
+          "detailUrl": "https://www.ibps.in/wp-content/uploads/Annexure-I_updated_25.09.2026.pdf",
+          "verificationStatus": "REVIEW_REQUIRED",
+          "extractedFields": ["title", "effective date", "official PDF URL"],
+          "unverifiedFields": ["vacancy totals and post-wise distribution"],
+          "retrievalNote": "Do not infer vacancy counts from the filename; read the annexure before publishing."
+        },
+        {
+          "title": "Corrigendum Regarding CRP-RRBs-XV",
+          "recordType": "CORRIGENDUM",
+          "publishedAt": "2026-09-21",
+          "detailUrl": "https://www.ibps.in/wp-content/uploads/Approved_Corrigendum-for-Extension_CRP-RRBs-XV-002.pdf",
+          "verificationStatus": "REVIEW_REQUIRED",
+          "extractedFields": ["title", "publication date", "official PDF URL"],
+          "unverifiedFields": ["revised application dates and conditions"],
+          "retrievalNote": "The filename indicates an extension corrigendum, but exact dates require PDF review."
+        },
+        {
+          "title": "Notification for Common Recruitment Process for CRP-RRB-XV",
+          "recordType": "RECRUITMENT_NOTICE",
+          "publishedAt": "2026-09-01",
+          "detailUrl": "https://www.ibps.in/wp-content/uploads/CRP-RRBs-XV-notification.pdf",
+          "applicationUrl": "https://ibpsreg.ibps.in/rrbxvaug26",
+          "verificationStatus": "REVIEW_REQUIRED",
+          "extractedFields": ["title", "publication date", "official PDF URL", "official application portal"],
+          "unverifiedFields": ["application end date", "post-wise vacancies", "salary", "qualification", "age criteria"],
+          "retrievalNote": "Use the latest corrigenda and vacancy annexure together with the base notification."
+        }
+      ]
+    },
+    {
+      "sourceOrganization": "Union Public Service Commission",
+      "sourceUrl": "https://www.upsc.gov.in/recruitment/recruitment-advertisement",
+      "lastCheckedAt": "2026-09-28T00:00:00.000Z",
+      "sourceKind": "OFFICIAL",
+      "observations": [
+        {
+          "title": "Advertisement No. 12 - 2026",
+          "recordType": "RECRUITMENT_ADVERTISEMENT",
+          "publishedAt": "2026-09-25",
+          "detailUrl": "https://www.upsc.gov.in/sites/default/files/AdvtNo-12-2026-Engl-250926_0.pdf",
+          "verificationStatus": "REVIEW_REQUIRED",
+          "extractedFields": ["advertisement number", "publication date", "official PDF URL"],
+          "unverifiedFields": ["post titles", "vacancies", "closing date", "qualification", "age criteria", "application URL"],
+          "retrievalNote": "The official PDF could not be text-extracted. Review the notice before creating job records."
+        },
+        {
+          "title": "Advertisement No. 11 - 2026",
+          "recordType": "RECRUITMENT_ADVERTISEMENT",
+          "publishedAt": "2026-09-10",
+          "detailUrl": "https://www.upsc.gov.in/sites/default/files/AdvtNo-11-2026-Engl-100926.pdf",
+          "verificationStatus": "REVIEW_REQUIRED",
+          "extractedFields": ["advertisement number", "publication date", "official PDF URL"],
+          "unverifiedFields": ["post titles", "vacancies", "closing date", "qualification", "age criteria", "application URL"],
+          "retrievalNote": "The official PDF could not be text-extracted. Review the notice before creating job records."
+        }
+      ]
+    },
+    {
+      "sourceOrganization": "Staff Selection Commission",
+      "sourceUrl": "https://ssc.gov.in/",
+      "lastCheckedAt": "2026-09-28T00:00:00.000Z",
+      "sourceKind": "OFFICIAL",
+      "observations": [
+        {
+          "title": "Tentative Vacancy of Combined Graduate Level Examination, 2026 as on 24.09.2026",
+          "recordType": "VACANCY_UPDATE",
+          "publishedAt": "2026-09-24",
+          "detailUrl": null,
+          "verificationStatus": "REVIEW_REQUIRED",
+          "extractedFields": ["title", "publication date", "official notice-board listing"],
+          "unverifiedFields": ["vacancy totals and post-wise distribution"],
+          "retrievalNote": "The official homepage listed the notice, but the direct PDF link was not available in the extracted page. Retrieve it from SSC Notice Board before import."
+        },
+        {
+          "title": "Stenographer Grade C and D Examination 2026: Tentative Answer Keys and Candidates' Response Sheets",
+          "recordType": "ANSWER_KEY",
+          "publishedAt": "2026-09-23",
+          "detailUrl": null,
+          "verificationStatus": "REVIEW_REQUIRED",
+          "extractedFields": ["title", "publication date", "official notice-board listing"],
+          "unverifiedFields": ["challenge deadline", "direct answer-key URL"],
+          "retrievalNote": "The official homepage listing was visible; open the notice to confirm challenge details."
+        },
+        {
+          "title": "Information regarding examination city and Admission Certificate for Combined Graduate Level Examination 2026 Tier-I",
+          "recordType": "ADMIT_CARD",
+          "publishedAt": "2026-09-21",
+          "detailUrl": null,
+          "verificationStatus": "REVIEW_REQUIRED",
+          "extractedFields": ["title", "publication date", "official notice-board listing"],
+          "unverifiedFields": ["download URL", "candidate-specific availability details"],
+          "retrievalNote": "The official homepage listing was visible; direct candidate login/download URLs were not extracted."
+        },
+        {
+          "title": "Combined Hindi Translators Examination 2026: Tentative Answer Keys and Candidates' Response Sheets",
+          "recordType": "ANSWER_KEY",
+          "publishedAt": "2026-09-21",
+          "detailUrl": null,
+          "verificationStatus": "REVIEW_REQUIRED",
+          "extractedFields": ["title", "publication date", "official notice-board listing"],
+          "unverifiedFields": ["challenge deadline", "direct answer-key URL"],
+          "retrievalNote": "The official homepage listing was visible; open the notice to confirm challenge details."
+        },
+        {
+          "title": "Important Notice - Junior Engineer Examination 2026",
+          "recordType": "EXAM_NOTICE",
+          "publishedAt": "2026-09-17",
+          "detailUrl": null,
+          "verificationStatus": "REVIEW_REQUIRED",
+          "extractedFields": ["title", "publication date", "official notice-board listing"],
+          "unverifiedFields": ["notice conditions and revised dates, if any"],
+          "retrievalNote": "The official homepage listing was visible; direct notice URL was not extracted."
+        },
+        {
+          "title": "Recruitment of Scientific Assistant in IMD through Junior Engineer Examination 2026",
+          "recordType": "RECRUITMENT_NOTICE",
+          "publishedAt": "2026-09-16",
+          "detailUrl": null,
+          "verificationStatus": "REVIEW_REQUIRED",
+          "extractedFields": ["title", "publication date", "official notice-board listing"],
+          "unverifiedFields": ["vacancies", "application window", "qualification", "age criteria", "salary"],
+          "retrievalNote": "The official homepage listing was visible; direct notice PDF URL and requirements need review."
+        }
+      ]
+    }
+  ],
+  "excluded": [
+    {
+      "sourceOrganization": "Union Public Service Commission",
+      "reason": "The examination-notifications page exposed application deadlines and exam dates, but the extraction did not associate those rows with unambiguous exam titles. Those dates were excluded rather than guessed."
+    },
+    {
+      "sourceOrganization": "Railway Recruitment Boards",
+      "reason": "RRB Chandigarh page extraction failed. The RRB Apply portal was used as the central official source instead."
+    }
+  ]
+}

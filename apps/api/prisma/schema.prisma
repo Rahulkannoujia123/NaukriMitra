@@ -1,0 +1,316 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  SUPER_ADMIN
+  EDITOR
+  MODERATOR
+}
+enum JobStatus {
+  DRAFT
+  SCHEDULED
+  PUBLISHED
+  ARCHIVED
+}
+enum VerificationStatus {
+  UNVERIFIED
+  VERIFIED
+  REVIEW_REQUIRED
+}
+enum ApplicationState {
+  INTERESTED
+  SAVED
+  APPLIED
+  ADMIT_CARD_DOWNLOADED
+  EXAM_COMPLETED
+  RESULT_AWAITED
+  SELECTED
+  NOT_SELECTED
+}
+enum ReminderOffset {
+  DAYS_7
+  DAYS_3
+  DAYS_1
+  LAST_DATE
+}
+enum UpdateType {
+  RESULT
+  ADMIT_CARD
+  ANSWER_KEY
+  CUTOFF
+  MERIT_LIST
+  EXAM_DATE
+}
+enum ExamEventType {
+  APPLICATION_START
+  APPLICATION_END
+  ADMIT_CARD
+  EXAM
+  ANSWER_KEY
+  RESULT
+}
+enum SourceKind {
+  OFFICIAL
+  EDITORIAL
+  COMMUNITY
+  AI
+  DEMO
+}
+
+model User {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+  email String @unique
+  passwordHash String
+  role Role @default(USER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  profile CandidateProfile?
+  refreshTokens RefreshToken[]
+  savedJobs SavedJob[]
+  applications ApplicationTracker[]
+  reminders Reminder[]
+  followedExams UserExam[]
+  notifications Notification[]
+  auditLogs AuditLog[]
+}
+
+model CandidateProfile {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+  userId String @unique @db.ObjectId
+  dateOfBirth DateTime?
+  gender String?
+  state String?
+  district String?
+  qualification String?
+  degree String?
+  branch String?
+  passingYear Int?
+  category String?
+  experienceMonths Int?
+  preferredDepartments String[] @default([])
+  preferredLocations String[] @default([])
+  salaryMin Int?
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  updatedAt DateTime @updatedAt
+}
+
+model RefreshToken {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+  tokenHash String @unique
+  userId String @db.ObjectId
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, expiresAt])
+}
+
+model Job {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+  slug String @unique
+  organization String
+  postName String
+  description String?
+  vacancy Int?
+  salaryMin Int?
+  salaryMax Int?
+  salaryText String?
+  ageMin Int?
+  ageMax Int?
+  ageCutoffDate DateTime?
+  ageRelaxation Json?
+  experienceMinMonths Int?
+  applicationStart DateTime?
+  applicationEnd DateTime?
+  examDate DateTime?
+  location String[] @default([])
+  states String[] @default([])
+  departments String[] @default([])
+  jobType String?
+  exam String?
+  sourceUrl String?
+  sourceOrganization String?
+  notificationUrl String?
+  applicationUrl String?
+  notificationDate DateTime?
+  lastVerifiedAt DateTime?
+  verificationStatus VerificationStatus @default(UNVERIFIED)
+  sourceKind SourceKind @default(OFFICIAL)
+  status JobStatus @default(DRAFT)
+  publishedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  qualifications JobQualification[]
+  documents JobDocument[]
+  updates JobUpdate[]
+  savedBy SavedJob[]
+  trackedBy ApplicationTracker[]
+  reminders Reminder[]
+  auditLogs AuditLog[]
+  @@index([status, applicationEnd])
+  @@index([verificationStatus, lastVerifiedAt])
+  @@index([organization, postName])
+}
+
+model JobQualification {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+  jobId String @db.ObjectId
+  qualification String
+  degree String?
+  branch String?
+  minimumPassingYear Int?
+  maximumPassingYear Int?
+  notes String?
+  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  @@index([qualification, degree])
+}
+
+model JobDocument {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+  jobId String @db.ObjectId
+  documentName String
+  required Boolean?
+  condition String?
+  sourcePage String?
+  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+}
+
+model JobUpdate {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+  jobId String @db.ObjectId
+  type UpdateType
+  title String
+  details String?
+  officialUrl String?
+  sourceOrganization String?
+  sourceKind SourceKind @default(OFFICIAL)
+  publishedAt DateTime?
+  createdAt DateTime @default(now())
+  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  @@index([type, publishedAt])
+}
+
+model Exam {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+  slug String @unique
+  name String
+  organization String
+  overview String?
+  officialUrl String?
+  sourceKind SourceKind @default(OFFICIAL)
+  events ExamEvent[]
+  followers UserExam[]
+}
+
+model ExamEvent {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+  examId String @db.ObjectId
+  type ExamEventType
+  date DateTime?
+  endDate DateTime?
+  title String?
+  officialUrl String?
+  sourceKind SourceKind @default(OFFICIAL)
+  exam Exam @relation(fields: [examId], references: [id], onDelete: Cascade)
+  @@index([type, date])
+}
+
+model SavedJob {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+  userId String @db.ObjectId
+  jobId String @db.ObjectId
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  @@unique([userId, jobId])
+}
+
+model ApplicationTracker {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+  userId String @db.ObjectId
+  jobId String @db.ObjectId
+  state ApplicationState @default(INTERESTED)
+  notes String?
+  updatedAt DateTime @updatedAt
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  @@unique([userId, jobId])
+}
+
+model Reminder {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+  userId String @db.ObjectId
+  jobId String @db.ObjectId
+  offset ReminderOffset
+  enabled Boolean @default(true)
+  sentAt DateTime?
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  @@unique([userId, jobId, offset])
+  @@index([enabled, sentAt])
+}
+
+model UserExam {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+  userId String @db.ObjectId
+  examId String @db.ObjectId
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  exam Exam @relation(fields: [examId], references: [id], onDelete: Cascade)
+  @@unique([userId, examId])
+}
+
+model Notification {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+  userId String @db.ObjectId
+  title String
+  body String
+  readAt DateTime?
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, readAt, createdAt])
+}
+
+model AuditLog {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+  actorId String? @db.ObjectId
+  jobId String? @db.ObjectId
+  action String
+  entityType String
+  entityId String
+  changes Json?
+  createdAt DateTime @default(now())
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  job Job? @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  @@index([entityType, entityId, createdAt])
+  @@index([actorId, createdAt])
+}
+
+model SourceSnapshot {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+  sourceOrganization String
+  sourceUrl String
+  noticeTitle String
+  recordType String
+  detailUrl String?
+  applicationUrl String?
+  publishedAt DateTime?
+  observedAt DateTime
+  sourceKind SourceKind @default(OFFICIAL)
+  verificationStatus VerificationStatus @default(REVIEW_REQUIRED)
+  extractedFields String[] @default([])
+  unverifiedFields String[] @default([])
+  retrievalNote String?
+  snapshot Json
+  createdAt DateTime @default(now())
+  @@unique([sourceUrl, recordType, noticeTitle])
+  @@index([sourceOrganization, observedAt])
+  @@index([verificationStatus, observedAt])
+}
