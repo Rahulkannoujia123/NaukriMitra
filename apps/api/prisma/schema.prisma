@@ -94,6 +94,7 @@ model CandidateProfile {
   passingYear Int?
   category String?
   experienceMonths Int?
+  percentage Float?
   preferredDepartments String[] @default([])
   preferredLocations String[] @default([])
   salaryMin Int?
