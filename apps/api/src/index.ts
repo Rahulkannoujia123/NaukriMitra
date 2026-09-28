@@ -205,10 +205,37 @@ app.post("/api/v1/assistant", asyncRoute(async (req, res) => {
     const matchedTerms = terms.filter(term => haystack.includes(term));
     return { job, matchedTerms, score: matchedTerms.length };
   }).filter(item => closingIntent ? true : item.score > 0).sort((left, right) => right.score - left.score).slice(0, 12);
+  const data = matches.map(({ job, matchedTerms }) => ({ id: job.id, slug: job.slug, organization: job.organization, postName: job.postName, applicationEnd: job.applicationEnd, applicationUrl: job.applicationUrl, notificationUrl: job.notificationUrl, sourceUrl: job.sourceUrl, sourceOrganization: job.sourceOrganization, lastVerifiedAt: job.lastVerifiedAt, verificationStatus: job.verificationStatus, sourceKind: job.sourceKind, matchedTerms }));
+  let answer = matches.length ? `${matches.length} database listing${matches.length === 1 ? "" : "s"} matched. Confirm dates and eligibility in each original notification.` : "No published database listings matched that question. Try a qualification, department, state, or exam name.";
+  const openRouterKey = process.env.OPENROUTER_API_KEY?.trim();
+  if (openRouterKey && data.length) {
+    try {
+      const aiResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${openRouterKey}`, "HTTP-Referer": process.env.SITE_URL ?? webOrigin, "X-Title": "NaukriSetu" },
+        body: JSON.stringify({
+          model: process.env.OPENROUTER_MODEL ?? "openai/gpt-4o-mini",
+          temperature: 0.2,
+          max_tokens: 350,
+          messages: [
+            { role: "system", content: "You are NaukriSetu's job assistant. Use ONLY the supplied database records. Never invent vacancies, dates, eligibility, salary, organizations, or links. If the records do not establish something, say it is not available and tell the user to check the official notification. Answer concisely in the user's language when possible." },
+            { role: "user", content: JSON.stringify({ question: parsed.data.message, records: data.map(item => ({ organization: item.organization, postName: item.postName, applicationEnd: item.applicationEnd, matchedTerms: item.matchedTerms, verificationStatus: item.verificationStatus, sourceOrganization: item.sourceOrganization })) }) }
+          ]
+        })
+      });
+      if (aiResponse.ok) {
+        const aiJson = await aiResponse.json() as { choices?: Array<{ message?: { content?: string } }> };
+        const generated = aiJson.choices?.[0]?.message?.content?.trim();
+        if (generated) answer = generated;
+      }
+    } catch (error) {
+      console.warn("OpenRouter assistant fallback:", error);
+    }
+  }
   return res.json({
-    answer: matches.length ? `${matches.length} database listing${matches.length === 1 ? "" : "s"} matched. Confirm dates and eligibility in each original notification.` : "No published database listings matched that question. Try a qualification, department, state, or exam name.",
-    eligibilityNotice: "Search matches are not an eligibility decision. Use the eligibility checker and review the official notification.",
-    data: matches.map(({ job, matchedTerms }) => ({ id: job.id, slug: job.slug, organization: job.organization, postName: job.postName, applicationEnd: job.applicationEnd, applicationUrl: job.applicationUrl, notificationUrl: job.notificationUrl, sourceUrl: job.sourceUrl, sourceOrganization: job.sourceOrganization, lastVerifiedAt: job.lastVerifiedAt, verificationStatus: job.verificationStatus, sourceKind: job.sourceKind, matchedTerms })),
+    answer,
+    eligibilityNotice: "AI answers are grounded in published database records, not a final eligibility decision. Review the official notification before applying.",
+    data,
   });
 }));
 const eligibilityInput = z.object({ dateOfBirth: z.string().datetime().nullable().optional(), qualification: z.string().max(100).nullable().optional(), degree: z.string().max(160).nullable().optional(), branch: z.string().max(160).nullable().optional(), passingYear: z.number().int().nullable().optional(), category: z.string().max(60).nullable().optional(), state: z.string().max(100).nullable().optional(), experienceMonths: z.number().int().min(0).nullable().optional() });
