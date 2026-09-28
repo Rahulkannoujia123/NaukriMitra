@@ -11,7 +11,6 @@ import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
 import { assessEligibility, type Candidate } from "./eligibility";
 import { fetchLiveSourceNotices } from "./live-sources";
-import { ingestLiveSourceSnapshots } from "./live-ingestion";
 
 const app = express();
 const configuredDatabaseUrl = process.env.DATABASE_URL;
@@ -95,9 +94,6 @@ app.get("/", (_req, res) => res.json({ name: "NaukriMitra API", status: "ok", he
 app.get("/api/v1/health", (_req, res) => res.json({ status: "ok" }));
 app.get("/api/v1/live-jobs", asyncRoute(async (_req, res) => {
   const result = await fetchLiveSourceNotices();
-  if (configuredDatabaseUrl?.startsWith("mongodb://") || configuredDatabaseUrl?.startsWith("mongodb+srv://")) {
-    void ingestLiveSourceSnapshots(result).catch((error) => console.error("Live source snapshot ingestion failed.", error));
-  }
   res.set("Cache-Control", "public, max-age=300, stale-while-revalidate=900");
   return res.json(result);
 }));
