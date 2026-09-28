@@ -4,6 +4,7 @@ export type Candidate = {
   degree?: string | null;
   branch?: string | null;
   passingYear?: number | null;
+  percentage?: number | null;
   category?: string | null;
   state?: string | null;
   experienceMonths?: number | null;
@@ -17,7 +18,7 @@ export type EligibilityJob = {
   states: string[];
   lastVerifiedAt: Date | null;
   verificationStatus: string;
-  qualifications: { qualification: string; degree: string | null; branch: string | null; minimumPassingYear: number | null; maximumPassingYear: number | null }[];
+  qualifications: { qualification: string; degree: string | null; branch: string | null; minimumPassingYear: number | null; maximumPassingYear: number | null; minimumPercentage: number | null }[];
   documents: { required: boolean | null; condition: string | null }[];
 };
 
@@ -55,12 +56,17 @@ export function assessEligibility(candidate: Candidate, job: EligibilityJob): El
       const qualificationMatch = clean(required.qualification) === clean(candidate.qualification);
       const degreeMatch = !required.degree || clean(required.degree) === clean(candidate.degree);
       const branchMatch = !required.branch || clean(required.branch) === clean(candidate.branch);
+      const percentageMatch = required.minimumPercentage === null || (candidate.percentage !== null && candidate.percentage !== undefined && candidate.percentage >= required.minimumPercentage);
       const yearMatch = (required.minimumPassingYear === null || (candidate.passingYear !== null && candidate.passingYear !== undefined && candidate.passingYear >= required.minimumPassingYear)) &&
         (required.maximumPassingYear === null || (candidate.passingYear !== null && candidate.passingYear !== undefined && candidate.passingYear <= required.maximumPassingYear));
-      return qualificationMatch && degreeMatch && branchMatch && yearMatch;
+      return qualificationMatch && degreeMatch && branchMatch && yearMatch && percentageMatch;
     });
+    const hasUnverifiablePercentageRule = job.qualifications.some(q => q.minimumPercentage !== null && candidate.percentage == null);
     const hasUnverifiableYearRule = job.qualifications.some(q => (q.minimumPassingYear !== null || q.maximumPassingYear !== null) && candidate.passingYear == null);
-    if (!matches && hasUnverifiableYearRule) manual.push("Passing-year eligibility needs your passing year to be confirmed.");
+    if (!matches && (hasUnverifiableYearRule || hasUnverifiablePercentageRule)) {
+      if (hasUnverifiableYearRule) manual.push("Passing-year eligibility needs your passing year to be confirmed.");
+      if (hasUnverifiablePercentageRule) manual.push("Minimum percentage eligibility needs your percentage to be confirmed.");
+    }
     else if (!matches) failed.push("Your education details do not match the listed qualification criteria.");
   }
 
