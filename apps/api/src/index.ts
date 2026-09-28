@@ -409,7 +409,7 @@ app.post("/api/v1/internal/reminders/run", asyncRoute(async (req, res) => {
   const now = new Date();
   const reminders = await prisma.reminder.findMany({
     where: { enabled: true, sentAt: null, job: { status: "PUBLISHED", applicationEnd: { not: null, gt: now } } },
-    include: { job: { select: { id: true, postName: true, organization: true, applicationEnd: true } } },
+    include: { user: { select: { email: true } }, job: { select: { id: true, postName: true, organization: true, applicationEnd: true } } },
     take: 500,
   });
   const due = reminders.filter(reminder => {
