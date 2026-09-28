@@ -26,6 +26,14 @@ type HomeJob = {
   url: string;
   source: "OFFICIAL";
   publishedAt: string | null;
+  vacancy?: number | null;
+  qualification?: string | null;
+  ageLimit?: string | null;
+  applicationStart?: string | null;
+  lastDate?: string | null;
+  examDate?: string | null;
+  notificationUrl?: string | null;
+  applicationUrl?: string | null;
 };
 
 type LiveSource = {
@@ -68,13 +76,25 @@ function JobRow({ job }: { job: HomeJob }) {
           <span>{job.organization}</span>
           <span>•</span>
           <span>{job.category}</span>
+          {job.vacancy ? <><span>•</span><span>{job.vacancy.toLocaleString("en-IN")} Posts</span></> : null}
           <span>•</span>
           <span className="official-badge"><CheckCircle2 size={12} /> Official</span>
         </div>
+        {(job.qualification || job.ageLimit || job.lastDate || job.examDate) ? (
+          <div className="result-meta result-details">
+            {job.qualification ? <span><b>Qualification:</b> {job.qualification}</span> : null}
+            {job.ageLimit ? <span><b>Age:</b> {job.ageLimit}</span> : null}
+            {job.lastDate ? <span><b>Last Date:</b> {job.lastDate}</span> : null}
+            {job.examDate ? <span><b>Exam:</b> {job.examDate}</span> : null}
+          </div>
+        ) : null}
       </div>
-      <a href={job.link} target="_blank" rel="noopener noreferrer" className="apply-link">
-        View <ArrowRight size={14} />
-      </a>
+      <div className="result-actions">
+        {job.notificationUrl ? <a href={job.notificationUrl} target="_blank" rel="noopener noreferrer" className="apply-link">Notification</a> : null}
+        <a href={job.applicationUrl ?? job.link} target="_blank" rel="noopener noreferrer" className="apply-link">
+          {job.applicationUrl ? "Apply" : "View"} <ArrowRight size={14} />
+        </a>
+      </div>
     </div>
   );
 }
