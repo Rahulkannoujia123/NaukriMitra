@@ -419,10 +419,18 @@ app.post("/api/v1/internal/reminders/run", asyncRoute(async (req, res) => {
     return now >= target && now < new Date(target.getTime() + 86_400_000);
   });
   for (const reminder of due) {
+    const body = `${reminder.job.postName} at ${reminder.job.organization} closes on ${reminder.job.applicationEnd!.toISOString()}.`;
     await prisma.$transaction([
-      prisma.notification.create({ data: { userId: reminder.userId, title: "Job deadline reminder", body: `${reminder.job.postName} at ${reminder.job.organization} closes on ${reminder.job.applicationEnd!.toISOString()}.` } }),
+      prisma.notification.create({ data: { userId: reminder.userId, title: "Job deadline reminder", body } }),
       prisma.reminder.update({ where: { id: reminder.id }, data: { sentAt: now } }),
     ]);
+    const resendKey = process.env.RESEND_API_KEY?.trim();
+    const from = process.env.RESEND_FROM_EMAIL?.trim();
+    if (resendKey && from) {
+      try {
+        await fetch("https://api.resend.com/emails", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${resendKey}` }, body: JSON.stringify({ from, to: [reminder.user.email], subject: `Reminder: ${reminder.job.postName} closes soon`, text: body }) });
+      } catch (error) { console.warn("Email reminder delivery failed; in-app notification was saved.", error); }
+    }
   }
   return res.json({ processed: due.length });
 }));
