@@ -77,18 +77,36 @@ export const LIVE_SOURCES: SourceConfig[] = [
 const absoluteUrl = (base: string, href: string) => {
   try { return new URL(href, base).toString(); } catch { return null; }
 };
-const clean = (value: string) => value.replace(/\s+/g, " ").trim();
+
+const decodeHtml = (value: string) => value
+  .replace(/&nbsp;/gi, " ")
+  .replace(/&amp;/gi, "&")
+  .replace(/&quot;/gi, '"')
+  .replace(/&#39;|&#x27;/gi, "'")
+  .replace(/&lt;/gi, "<")
+  .replace(/&gt;/gi, ">");
+
+const clean = (value: string) => decodeHtml(value
+  .replace(/<script[\s\S]*?<\/script>/gi, " ")
+  .replace(/<style[\s\S]*?<\/style>/gi, " ")
+  .replace(/<[^>]+>/g, " "))
+  .replace(/\s+/g, " ").trim();
+
+const isUsefulNotice = (title: string, link: string) =>
+  /(recruit|vacanc|career|notification|advertisement|recruitment|exam|admit|result|apply|selection|post|job|employment|notice|hiring|opening)/i.test(title + " " + link);
 
 const extractLinks = (html: string, source: SourceConfig): LiveSource[] => {
   const results: LiveSource[] = [];
-  const pattern = /<a[^>]+href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
-  let match: RegExpExecArray | null;
-  while ((match = pattern.exec(html)) && results.length < 40) {
-    const link = absoluteUrl(source.url, match[1]);
-    const title = clean(match[2].replace(/<[^>]+>/g, " ").replace(/&nbsp;/gi, " ").replace(/&amp;/gi, "&"));
-    if (!link || title.length < 8) continue;
-    if (!/(recruit|vacanc|career|notification|advertisement|exam|admit|result|apply|selection|post|job|employment)/i.test(title + " " + link)) continue;
-    if (results.some(item => item.link === link && item.title === title)) continue;
+  const seen = new Set<string>();
+  const baseUrl = source.feedUrl || source.url;
+
+  const add = (href: string, rawTitle: string) => {
+    const link = absoluteUrl(baseUrl, href);
+    const title = clean(rawTitle);
+    if (!link || title.length < 8 || !isUsefulNotice(title, link)) return;
+    const key = link + "|" + title;
+    if (seen.has(key)) return;
+    seen.add(key);
     results.push({
       id: Buffer.from(source.organization + "|" + title + "|" + link).toString("base64url").slice(0, 40),
       organization: source.organization,
@@ -99,35 +117,51 @@ const extractLinks = (html: string, source: SourceConfig): LiveSource[] => {
       publishedAt: null,
       source: "OFFICIAL",
     });
+  };
+
+  const anchorPattern = /<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = anchorPattern.exec(html)) && results.length < 50) {
+    add(match[1], match[2]);
   }
+
   return results;
 };
 
 export async function fetchLiveSourceNotices() {
-  const settled = await Promise.allSettled(LIVE_SOURCES.map(async source => {
+  const settled = await Promise.allSettled(LIVE_SOURCES.map(async (source) => {
     const feedUrl = source.feedUrl || source.url;
     const response = await fetch(feedUrl, {
       headers: {
-        "user-agent": "NaukriMitra/1.0 (+https://rojgaarmitra.vercel.app)",
+        accept: "text/html,application/xhtml+xml",
+        "user-agent": "Mozilla/5.0 (compatible; RojgaarMitra/1.0; +https://rojgaarmitra.vercel.app)",
       },
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(10000),
       cache: "no-store",
     });
-    if (!response.ok) throw new Error(`${source.organization}: HTTP ${response.status}`);
-    const html = await response.text();
-    return { source, notices: extractLinks(html, source) };
+    if (!response.ok) throw new Error(source.organization + ": HTTP " + response.status);
+    return { source, notices: extractLinks(await response.text(), source) };
   }));
-  const notices = settled.flatMap(item => item.status === "fulfilled" ? item.value.notices : []);
-  const failedSources = settled.flatMap(item => item.status === "rejected" ? [String(item.reason)] : []);
+
+  const notices = settled.flatMap((item) =>
+    item.status === "fulfilled" ? item.value.notices : []
+  );
+  const failedSources = settled.flatMap((item) =>
+    item.status === "rejected" ? [String(item.reason)] : []
+  );
+
   return {
     data: notices,
-    sources: LIVE_SOURCES.map(source => ({
+    sources: LIVE_SOURCES.map((source) => ({
       organization: source.organization,
       category: source.category,
       url: source.url,
-      connected: !failedSources.some(error => error.includes(source.organization)),
+      connected: !failedSources.some((error) => error.includes(source.organization)),
     })),
     fetchedAt: new Date().toISOString(),
-    note: "Live notices are read from official source pages. Verify the original notification before applying.",
+    failedCount: failedSources.length,
+    note: notices.length > 0
+      ? "Live notices are read from official source pages. Verify the original notification before applying."
+      : "No matching notice links were extracted. Open the official source directory below and verify the latest notification.",
   };
 }
