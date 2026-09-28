@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { readFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import { Prisma, PrismaClient, SourceKind, VerificationStatus } from "@prisma/client";
 
@@ -26,6 +27,9 @@ async function main() {
   let imported = 0;
   for (const source of batch.sources) {
     for (const observation of source.observations) {
+      const contentHash = createHash("sha256").update(JSON.stringify(observation)).digest("hex");
+      const previous = await prisma.sourceSnapshot.findFirst({ where: { sourceUrl: source.sourceUrl, recordType: observation.recordType }, orderBy: { observedAt: "desc" } });
+      const changed = Boolean(previous && previous.contentHash && previous.contentHash !== contentHash);
       await prisma.sourceSnapshot.upsert({
         where: { sourceUrl_recordType_noticeTitle: { sourceUrl: source.sourceUrl, recordType: observation.recordType, noticeTitle: observation.title } },
         create: {
@@ -42,6 +46,9 @@ async function main() {
           extractedFields: observation.extractedFields,
           unverifiedFields: observation.unverifiedFields,
           retrievalNote: observation.retrievalNote,
+          contentHash,
+          previousContentHash: previous?.contentHash ?? null,
+          changeSummary: changed ? "Source observation changed since the previous snapshot." : null,
           snapshot: observation as Prisma.InputJsonValue,
         },
         update: {
@@ -53,6 +60,9 @@ async function main() {
           extractedFields: observation.extractedFields,
           unverifiedFields: observation.unverifiedFields,
           retrievalNote: observation.retrievalNote,
+          contentHash,
+          previousContentHash: previous?.contentHash ?? null,
+          changeSummary: changed ? "Source observation changed since the previous snapshot." : null,
           snapshot: observation as Prisma.InputJsonValue,
         },
       });

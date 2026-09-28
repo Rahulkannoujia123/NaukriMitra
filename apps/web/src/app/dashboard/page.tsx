@@ -79,7 +79,7 @@ export default function DashboardPage() {
     const token = sessionStorage.getItem("ns_access");
     const form = new FormData(event.currentTarget);
     const body: Record<string, unknown> = Object.fromEntries(form.entries());
-    for (const key of ["passingYear", "experienceMonths", "salaryMin"]) { const value = body[key]; body[key] = value ? Number(value) : null; }
+    for (const key of ["passingYear", "percentage", "experienceMonths", "salaryMin"]) { const value = body[key]; body[key] = value ? Number(value) : null; }
     const dob = body.dateOfBirth; body.dateOfBirth = dob ? new Date(`${dob}T00:00:00.000Z`).toISOString() : null;
     for (const key of ["preferredDepartments", "preferredLocations"]) { const value = String(body[key] ?? ""); body[key] = value.split(",").map(item => item.trim()).filter(Boolean); }
     const response = await fetch(`${API}/api/v1/me/profile`, { method: "PATCH", credentials: "include", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify(body) });
@@ -93,7 +93,7 @@ export default function DashboardPage() {
   const profile = user?.profile ?? {};
   const value = (key: string) => typeof profile[key] === "string" || typeof profile[key] === "number" ? String(profile[key]) : "";
   return <main>
-    <header className="header"><div className="container header-in"><a className="brand" href="/"><span className="brand-mark">N</span><span>Naukri<span style={{ color: "#087b69" }}>Setu</span></span></a><button className="btn btn-light" onClick={logout}><LogOut size={15}/> Sign out</button></div></header>
+    <header className="header"><div className="container header-in"><a className="brand" href="/"><span className="brand-mark">N</span><span>Naukri<span style={{ color: "#087b69" }}>Mitra</span></span></a><button className="btn btn-light" onClick={logout}><LogOut size={15}/> Sign out</button></div></header>
     <div className="container dashboard-page">
       <div className="dashboard-title"><div><span className="eyebrow dark"><UserRound size={14}/> PERSONAL DASHBOARD</span><h1>{user ? `Welcome, ${user.email.split("@")[0]}` : "Loading your dashboard…"}</h1><p>Build your profile to get relevant job matches.</p></div></div>
       {error && <div className="form-error" role="alert">{error}</div>}{notice && <div className="success-note" role="status">{notice}</div>}
@@ -110,7 +110,7 @@ export default function DashboardPage() {
           <label>Qualification<select name="qualification" defaultValue={value("qualification")}><option value="">Select qualification</option><option>10th</option><option>12th</option><option>Diploma</option><option>Graduate</option><option>Postgraduate</option><option>Doctorate</option></select></label>
           <label>Degree<input name="degree" placeholder="e.g. B.Tech" defaultValue={value("degree")}/></label>
           <label>Branch<input name="branch" placeholder="e.g. Computer Science" defaultValue={value("branch")}/></label>
-          <label>Passing year<input name="passingYear" type="number" min="1940" max="2100" defaultValue={value("passingYear")}/></label>
+          <label>Percentage<input name="percentage" type="number" min="0" max="100" step="0.01" defaultValue={value("percentage")}/></label><label>Passing year<input name="passingYear" type="number" min="1940" max="2100" defaultValue={value("passingYear")}/></label>
           <label>Category<select name="category" defaultValue={value("category")}><option value="">Select category</option><option>General</option><option>OBC</option><option>SC</option><option>ST</option><option>EWS</option></select></label>
           <label>Experience (months)<input name="experienceMonths" type="number" min="0" defaultValue={value("experienceMonths")}/></label>
           <label>State<input name="state" placeholder="e.g. Maharashtra" defaultValue={value("state")}/></label>

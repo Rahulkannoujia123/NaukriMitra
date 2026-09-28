@@ -1,6 +1,18 @@
 {
   "name": "naukrisetu",
   "private": true,
-  "workspaces": ["apps/*", "packages/*"],
-  "scripts": {"dev": "npm run dev --workspace @naukrisetu/web", "dev:web": "npm run dev --workspace @naukrisetu/web", "dev:api": "npm run dev --workspace @naukrisetu/api", "build": "npm run build --workspace @naukrisetu/web && npm run build --workspace @naukrisetu/api", "db:generate": "npm run db:generate --workspace @naukrisetu/api", "db:push": "npm run db:push --workspace @naukrisetu/api", "db:ingest:central": "npm run db:ingest:central --workspace @naukrisetu/api"}
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace @naukrisetu/web",
+    "dev:web": "npm run dev --workspace @naukrisetu/web",
+    "dev:api": "npm run dev --workspace @naukrisetu/api",
+    "build": "npm run build --workspace @naukrisetu/web && npm run build --workspace @naukrisetu/api",
+    "db:generate": "npm run db:generate --workspace @naukrisetu/api",
+    "db:push": "npm run db:push --workspace @naukrisetu/api",
+    "db:ingest:central": "npm run db:ingest:central --workspace @naukrisetu/api",
+    "test": "npm run test --workspace @naukrisetu/api"
+  }
 }
