@@ -105,8 +105,11 @@ const extractLinks = (html: string, source: SourceConfig): LiveSource[] => {
 
 export async function fetchLiveSourceNotices() {
   const settled = await Promise.allSettled(LIVE_SOURCES.map(async source => {
-    const response = await fetch(source.feedUrl ?? source.url, {
-      headers: { "user-agent": "NaukriMitra/1.0 (+https://rojgaarmitra.vercel.app)" },
+    const feedUrl = source.feedUrl || source.url;
+    const response = await fetch(feedUrl, {
+      headers: {
+        "user-agent": "NaukriMitra/1.0 (+https://rojgaarmitra.vercel.app)",
+      },
       signal: AbortSignal.timeout(8000),
       cache: "no-store",
     });
