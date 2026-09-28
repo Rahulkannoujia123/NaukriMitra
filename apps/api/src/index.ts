@@ -10,6 +10,7 @@ import jwt from "jsonwebtoken";
 import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
 import { assessEligibility, type Candidate } from "./eligibility";
+import { fetchLiveSourceNotices } from "./live-sources";
 
 const app = express();
 const prisma = new PrismaClient();
@@ -137,7 +138,7 @@ app.patch("/api/v1/me/profile", auth, verifyMutationOrigin, asyncRoute(async (re
   return res.json({ profile });
 }));
 
-app.get("/api/v1/jobs", asyncRoute(async (req, res) => {
+app.get("/api/v1/live-jobs", asyncRoute(async (_req, res) => {\n  const result = await fetchLiveSourceNotices();\n  res.set("Cache-Control", "public, max-age=300, stale-while-revalidate=900");\n  return res.json(result);\n}));\n\napp.get("/api/v1/jobs", asyncRoute(async (req, res) => {
   const page = Math.max(1, Number(req.query.page) || 1);
   const pageSize = Math.min(50, Math.max(1, Number(req.query.pageSize) || 20));
   const query = String(req.query.q ?? "").trim().slice(0, 100);
