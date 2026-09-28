@@ -1,6 +1,6 @@
 import { ArrowRight, Bell, BookOpen, BriefcaseBusiness, CalendarDays, Check, ChevronRight, CircleHelp, Clock3, FileCheck2, MapPin, Search, ShieldCheck, Sparkles, TrendingUp, Users } from "lucide-react";
 
-const API = process.env.API_URL ?? "http://localhost:4000";
+const API = process.env.API_URL ?? (process.env.NODE_ENV === "production" ? "https://rojgaarmitra.vercel.app" : "http://localhost:4000");
 type HomeJob = { id: string; slug: string; organization: string; postName: string; vacancy: number | null; salaryText: string | null; location: string[]; applicationEnd: string | null; verificationStatus: string; lastVerifiedAt: string | null; sourceKind: string };
 type HomeUpdate = { id: string; title: string; type: string; sourceOrganization: string | null; job: { slug: string; organization: string } };
 type HomeExam = { id: string; slug: string; name: string; organization: string; events: { type: string; date: string | null; title: string | null }[] };
