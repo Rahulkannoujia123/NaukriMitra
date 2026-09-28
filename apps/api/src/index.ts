@@ -50,6 +50,18 @@ const verifyMutationOrigin = (req: Request, res: Response, next: NextFunction) =
   next();
 };
 const httpUrl = z.string().url().refine(value => { const protocol = new URL(value).protocol; return protocol === "http:" || protocol === "https:"; }, "Use an HTTP or HTTPS URL.");
+const normalizeKeyPart = (value?: string | null) => (value ?? "").trim().toLocaleLowerCase("en-IN").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+const buildRecruitmentKey = (input: { organization: string; postName: string; notificationDate?: Date | null; applicationEnd?: Date | null }) => [
+  normalizeKeyPart(input.organization),
+  normalizeKeyPart(input.postName),
+  input.notificationDate ? input.notificationDate.toISOString().slice(0, 10) : "",
+  input.applicationEnd ? input.applicationEnd.toISOString().slice(0, 10) : "",
+].filter(Boolean).join("|");
+const activeJobWhere = (extra: Prisma.JobWhereInput = {}): Prisma.JobWhereInput => ({
+  status: "PUBLISHED",
+  AND: [{ OR: [{ applicationEnd: null }, { applicationEnd: { gte: new Date() } }] }, extra],
+});
+
 const asyncRoute = (fn: (req: AuthRequest, res: Response) => Promise<unknown>) => (req: Request, res: Response, next: NextFunction) => {
   Promise.resolve(fn(req as AuthRequest, res)).catch(next);
 };
@@ -61,7 +73,7 @@ const jobInput = z.object({
   ageMin: z.number().int().nonnegative().nullable().optional(), ageMax: z.number().int().positive().nullable().optional(), ageCutoffDate: z.string().datetime().nullable().optional(), experienceMinMonths: z.number().int().nonnegative().nullable().optional(),
   applicationStart: z.string().datetime().nullable().optional(), applicationEnd: z.string().datetime().nullable().optional(), examDate: z.string().datetime().nullable().optional(), location: z.array(z.string().max(100)).max(100).optional(), states: z.array(z.string().max(100)).max(100).optional(), departments: z.array(z.string().max(100)).max(100).optional(), jobType: z.string().max(80).nullable().optional(), exam: z.string().max(180).nullable().optional(),
   sourceUrl: httpUrl.nullable().optional(), sourceOrganization: z.string().max(180).nullable().optional(), notificationUrl: httpUrl.nullable().optional(), applicationUrl: httpUrl.nullable().optional(), notificationDate: z.string().datetime().nullable().optional(),
-  qualifications: z.array(z.object({ qualification: z.string().min(1).max(100), degree: z.string().max(160).nullable().optional(), branch: z.string().max(160).nullable().optional(), minimumPassingYear: z.number().int().nullable().optional(), maximumPassingYear: z.number().int().nullable().optional(), notes: z.string().max(1000).nullable().optional() })).max(30).optional(),
+  qualifications: z.array(z.object({ qualification: z.string().min(1).max(100), degree: z.string().max(160).nullable().optional(), branch: z.string().max(160).nullable().optional(), minimumPassingYear: z.number().int().nullable().optional(), maximumPassingYear: z.number().int().nullable().optional(), minimumPercentage: z.number().min(0).max(100).nullable().optional(), notes: z.string().max(1000).nullable().optional() })).max(30).optional(),
   documents: z.array(z.object({ documentName: z.string().trim().min(1).max(160), required: z.boolean().nullable().optional(), condition: z.string().max(1000).nullable().optional(), sourcePage: z.string().max(100).nullable().optional() })).max(50).optional(),
 });
 
@@ -115,7 +127,7 @@ app.get("/api/v1/me", auth, asyncRoute(async (req, res) => {
   if (!user) return res.status(404).json({ error: "USER_NOT_FOUND" });
   return res.json({ user });
 }));
-const profileInput = z.object({ dateOfBirth: z.string().datetime().nullable().optional(), gender: z.string().max(40).nullable().optional(), state: z.string().max(100).nullable().optional(), district: z.string().max(100).nullable().optional(), qualification: z.string().max(100).nullable().optional(), degree: z.string().max(160).nullable().optional(), branch: z.string().max(160).nullable().optional(), passingYear: z.number().int().min(1940).max(2100).nullable().optional(), category: z.string().max(60).nullable().optional(), experienceMonths: z.number().int().min(0).max(1200).nullable().optional(), preferredDepartments: z.array(z.string().max(100)).max(50).optional(), preferredLocations: z.array(z.string().max(100)).max(50).optional(), salaryMin: z.number().int().nonnegative().nullable().optional() });
+const profileInput = z.object({ dateOfBirth: z.string().datetime().nullable().optional(), gender: z.string().max(40).nullable().optional(), state: z.string().max(100).nullable().optional(), district: z.string().max(100).nullable().optional(), qualification: z.string().max(100).nullable().optional(), degree: z.string().max(160).nullable().optional(), branch: z.string().max(160).nullable().optional(), passingYear: z.number().int().min(1940).max(2100).nullable().optional(), percentage: z.number().min(0).max(100).nullable().optional(), category: z.string().max(60).nullable().optional(), experienceMonths: z.number().int().min(0).max(1200).nullable().optional(), preferredDepartments: z.array(z.string().max(100)).max(50).optional(), preferredLocations: z.array(z.string().max(100)).max(50).optional(), salaryMin: z.number().int().nonnegative().nullable().optional() });
 app.patch("/api/v1/me/profile", auth, verifyMutationOrigin, asyncRoute(async (req, res) => {
   const parsed = profileInput.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "INVALID_INPUT", details: parsed.error.flatten() });
@@ -145,7 +157,7 @@ app.get("/api/v1/jobs", asyncRoute(async (req, res) => {
   if (Number.isInteger(age) && age >= 14 && age <= 100) filters.push({ AND: [{ OR: [{ ageMin: null }, { ageMin: { lte: age } }] }, { OR: [{ ageMax: null }, { ageMax: { gte: age } }] }] });
   if (Number.isFinite(closeWithinDays) && closeWithinDays > 0) filters.push({ applicationEnd: { gte: new Date(), lte: new Date(Date.now() + Math.min(closeWithinDays, 365) * 86_400_000) } });
   const where: Prisma.JobWhereInput = {
-    status: "PUBLISHED",
+    ...activeJobWhere(),
     ...(query ? { OR: [{ organization: { contains: query, mode: "insensitive" } }, { postName: { contains: query, mode: "insensitive" } }, { exam: { contains: query, mode: "insensitive" } }] } : {}),
     ...(qualification ? { qualifications: { some: { qualification: { contains: qualification, mode: "insensitive" } } } } : {}),
     ...(state ? { states: { has: state } } : {}),
@@ -165,7 +177,7 @@ app.get("/api/v1/jobs", asyncRoute(async (req, res) => {
   return res.json({ data: jobs, page, pageSize });
 }));
 app.get("/api/v1/jobs/:slug", asyncRoute(async (req, res) => {
-  const job = await prisma.job.findFirst({ where: { slug: req.params.slug, status: "PUBLISHED" }, include: { qualifications: true, documents: true, updates: { orderBy: { publishedAt: "desc" } } } });
+  const job = await prisma.job.findFirst({ where: activeJobWhere({ slug: req.params.slug }), include: { qualifications: true, documents: true, updates: { orderBy: { publishedAt: "desc" } } } });
   if (!job) return res.status(404).json({ error: "JOB_NOT_FOUND" });
   return res.json({ data: job });
 }));
@@ -178,7 +190,7 @@ app.get("/api/v1/jobs/:slug/updates", asyncRoute(async (req, res) => {
   const key = typeof req.query.type === "string" ? req.query.type : "";
   const types = typeMap[key];
   if (!types) return res.status(400).json({ error: "INVALID_UPDATE_TYPE" });
-  const job = await prisma.job.findFirst({ where: { slug: req.params.slug, status: "PUBLISHED" }, select: { id: true, slug: true, postName: true, organization: true, sourceUrl: true, sourceOrganization: true, verificationStatus: true, sourceKind: true, lastVerifiedAt: true } });
+  const job = await prisma.job.findFirst({ where: activeJobWhere({ slug: req.params.slug }), select: { id: true, slug: true, postName: true, organization: true, sourceUrl: true, sourceOrganization: true, verificationStatus: true, sourceKind: true, lastVerifiedAt: true } });
   if (!job) return res.status(404).json({ error: "JOB_NOT_FOUND" });
   const updates = await prisma.jobUpdate.findMany({ where: { jobId: job.id, type: { in: types }, publishedAt: { not: null } }, orderBy: { publishedAt: "desc" } });
   return res.json({ data: { job, updates } });
@@ -192,10 +204,7 @@ app.post("/api/v1/assistant", asyncRoute(async (req, res) => {
   const terms = [...new Set(message.match(/[a-z0-9]{2,}/g) ?? [])].filter(term => !stopWords.has(term));
   const now = new Date();
   const candidates = await prisma.job.findMany({
-    where: {
-      status: "PUBLISHED",
-      ...(closingIntent ? { applicationEnd: { gte: now, lte: new Date(now.getTime() + 7 * 86_400_000) } } : {}),
-    },
+    where: activeJobWhere(closingIntent ? { applicationEnd: { gte: now, lte: new Date(now.getTime() + 7 * 86_400_000) } } : {}),
     include: { qualifications: { select: { qualification: true, degree: true, branch: true } } },
     orderBy: [{ applicationEnd: "asc" }, { publishedAt: "desc" }],
     take: 300,
@@ -250,7 +259,7 @@ app.post("/api/v1/jobs/:id/eligibility", asyncRoute(async (req, res) => {
 app.get("/api/v1/me/matches", auth, asyncRoute(async (req, res) => {
   const profile = await prisma.candidateProfile.findUnique({ where: { userId: req.claims!.sub } });
   if (!profile) return res.json({ eligible: [], checkManually: [], profileRequired: true });
-  const jobs = await prisma.job.findMany({ where: { status: "PUBLISHED" }, include: { qualifications: true, documents: true }, orderBy: [{ applicationEnd: "asc" }, { publishedAt: "desc" }], take: 100 });
+  const jobs = await prisma.job.findMany({ where: activeJobWhere(), include: { qualifications: true, documents: true }, orderBy: [{ applicationEnd: "asc" }, { publishedAt: "desc" }], take: 100 });
   const eligible = [];
   const checkManually = [];
   for (const job of jobs) {
@@ -542,7 +551,13 @@ app.post("/api/v1/admin/jobs", auth, requireRole(...editors), verifyMutationOrig
   const parsed = jobInput.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "INVALID_INPUT", details: parsed.error.flatten() });
   const { qualifications = [], documents = [], ...fields } = parsed.data;
-  const job = await prisma.job.create({ data: { ...fields, ageCutoffDate: fields.ageCutoffDate ? new Date(fields.ageCutoffDate) : null, applicationStart: fields.applicationStart ? new Date(fields.applicationStart) : null, applicationEnd: fields.applicationEnd ? new Date(fields.applicationEnd) : null, examDate: fields.examDate ? new Date(fields.examDate) : null, notificationDate: fields.notificationDate ? new Date(fields.notificationDate) : null, status: "DRAFT", verificationStatus: "UNVERIFIED", qualifications: { create: qualifications }, documents: { create: documents } } });
+  const normalizedDates = { ageCutoffDate: fields.ageCutoffDate ? new Date(fields.ageCutoffDate) : null, applicationStart: fields.applicationStart ? new Date(fields.applicationStart) : null, applicationEnd: fields.applicationEnd ? new Date(fields.applicationEnd) : null, examDate: fields.examDate ? new Date(fields.examDate) : null, notificationDate: fields.notificationDate ? new Date(fields.notificationDate) : null };
+  const recruitmentKey = buildRecruitmentKey({ organization: fields.organization, postName: fields.postName, notificationDate: normalizedDates.notificationDate, applicationEnd: normalizedDates.applicationEnd });
+  if (recruitmentKey) {
+    const duplicate = await prisma.job.findFirst({ where: { recruitmentKey, status: { not: "ARCHIVED" } }, select: { id: true, slug: true, status: true } });
+    if (duplicate) return res.status(409).json({ error: "DUPLICATE_RECRUITMENT", message: "A similar recruitment already exists.", existing: duplicate });
+  }
+  const job = await prisma.job.create({ data: { ...fields, ...normalizedDates, recruitmentKey: recruitmentKey || null, status: "DRAFT", verificationStatus: "UNVERIFIED", qualifications: { create: qualifications }, documents: { create: documents } } });
   await prisma.auditLog.create({ data: { actorId: req.claims!.sub, jobId: job.id, action: "JOB_CREATED", entityType: "Job", entityId: job.id } });
   return res.status(201).json({ data: job });
 }));
@@ -555,6 +570,16 @@ app.patch("/api/v1/admin/jobs/:id", auth, requireRole(...editors), verifyMutatio
   const dateFields = ["ageCutoffDate", "applicationStart", "applicationEnd", "examDate", "notificationDate"] as const;
   const data: Record<string, unknown> = { ...fields };
   for (const field of dateFields) if (fields[field] !== undefined) data[field] = fields[field] ? new Date(fields[field]!) : null;
+  const nextOrganization = fields.organization ?? before.organization;
+  const nextPostName = fields.postName ?? before.postName;
+  const nextNotificationDate = fields.notificationDate !== undefined ? (fields.notificationDate ? new Date(fields.notificationDate) : null) : before.notificationDate;
+  const nextApplicationEnd = fields.applicationEnd !== undefined ? (fields.applicationEnd ? new Date(fields.applicationEnd) : null) : before.applicationEnd;
+  const recruitmentKey = buildRecruitmentKey({ organization: nextOrganization, postName: nextPostName, notificationDate: nextNotificationDate, applicationEnd: nextApplicationEnd });
+  if (recruitmentKey && recruitmentKey !== before.recruitmentKey) {
+    const duplicate = await prisma.job.findFirst({ where: { recruitmentKey, id: { not: before.id }, status: { not: "ARCHIVED" } }, select: { id: true, slug: true, status: true } });
+    if (duplicate) return res.status(409).json({ error: "DUPLICATE_RECRUITMENT", message: "A similar recruitment already exists.", existing: duplicate });
+    data.recruitmentKey = recruitmentKey;
+  }
   if (qualifications) data.qualifications = { deleteMany: {}, create: qualifications };
   if (documents) data.documents = { deleteMany: {}, create: documents };
   const updated = await prisma.$transaction(async tx => {
@@ -567,6 +592,7 @@ app.patch("/api/v1/admin/jobs/:id", auth, requireRole(...editors), verifyMutatio
 app.post("/api/v1/admin/jobs/:id/publish", auth, requireRole(...editors), verifyMutationOrigin, asyncRoute(async (req, res) => {
   const job = await prisma.job.findUnique({ where: { id: req.params.id } });
   if (!job) return res.status(404).json({ error: "JOB_NOT_FOUND" });
+  if (job.applicationEnd && job.applicationEnd < new Date()) return res.status(422).json({ error: "APPLICATION_CLOSED", message: "This recruitment deadline has already passed." });
   if (!job.sourceUrl || !job.sourceOrganization || !job.notificationUrl || !job.applicationUrl) return res.status(422).json({ error: "OFFICIAL_SOURCE_REQUIRED", message: "Add the source organization, official source, notification and application links before publishing." });
   if (!job.lastVerifiedAt || job.verificationStatus !== "VERIFIED" || job.sourceKind !== "OFFICIAL") return res.status(422).json({ error: "SOURCE_REVIEW_REQUIRED", message: "Verify the official source and record its verification time before publishing." });
   const published = await prisma.$transaction(async tx => {

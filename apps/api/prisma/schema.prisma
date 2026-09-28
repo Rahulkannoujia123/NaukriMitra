@@ -94,6 +94,7 @@ model CandidateProfile {
   passingYear Int?
   category String?
   experienceMonths Int?
+  percentage Float?
   preferredDepartments String[] @default([])
   preferredLocations String[] @default([])
   salaryMin Int?
@@ -115,6 +116,7 @@ model RefreshToken {
 model Job {
   id String @id @default(auto()) @map("_id") @db.ObjectId
   slug String @unique
+  recruitmentKey String?
   organization String
   postName String
   description String?
@@ -157,6 +159,7 @@ model Job {
   @@index([status, applicationEnd])
   @@index([verificationStatus, lastVerifiedAt])
   @@index([organization, postName])
+  @@index([recruitmentKey])
 }
 
 model JobQualification {
@@ -167,6 +170,7 @@ model JobQualification {
   branch String?
   minimumPassingYear Int?
   maximumPassingYear Int?
+  minimumPercentage Float?
   notes String?
   job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
   @@index([qualification, degree])
