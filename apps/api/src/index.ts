@@ -13,7 +13,12 @@ import { assessEligibility, type Candidate } from "./eligibility";
 import { fetchLiveSourceNotices } from "./live-sources";
 
 const app = express();
-const prisma = new PrismaClient();
+const configuredDatabaseUrl = process.env.DATABASE_URL;
+const databaseUrl =
+  configuredDatabaseUrl?.startsWith("mongodb://") || configuredDatabaseUrl?.startsWith("mongodb+srv://")
+    ? configuredDatabaseUrl
+    : "mongodb://127.0.0.1:27017/naukrimitra";
+const prisma = new PrismaClient({ datasourceUrl: databaseUrl });
 const production = process.env.NODE_ENV === "production";
 const webOrigin = process.env.WEB_ORIGIN ?? "http://localhost:3000";
 const accessSecret = process.env.JWT_ACCESS_SECRET;
@@ -87,6 +92,23 @@ async function persistRefreshToken(user: { id: string; role: Role }, res: Respon
 
 app.get("/", (_req, res) => res.json({ name: "NaukriMitra API", status: "ok", health: "/api/v1/health" }));
 app.get("/api/v1/health", (_req, res) => res.json({ status: "ok" }));
+app.get("/api/v1/live-jobs", asyncRoute(async (_req, res) => {
+  const result = await fetchLiveSourceNotices();
+  res.set("Cache-Control", "public, max-age=300, stale-while-revalidate=900");
+  return res.json(result);
+}));
+
+const requireDatabase = (_req: Request, res: Response, next: NextFunction) => {
+  if (!configuredDatabaseUrl?.startsWith("mongodb://") && !configuredDatabaseUrl?.startsWith("mongodb+srv://")) {
+    return res.status(503).json({
+      error: "DATABASE_DISABLED",
+      message: "Database-backed features are temporarily disabled. Live official job sources remain available.",
+    });
+  }
+  next();
+};
+
+app.use("/api/v1", requireDatabase);
 app.post("/api/v1/auth/register", verifyMutationOrigin, asyncRoute(async (req, res) => {
   const parsed = accountInput.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "INVALID_INPUT", details: parsed.error.flatten() });
@@ -138,7 +160,7 @@ app.patch("/api/v1/me/profile", auth, verifyMutationOrigin, asyncRoute(async (re
   return res.json({ profile });
 }));
 
-app.get("/api/v1/live-jobs", asyncRoute(async (_req, res) => {\n  const result = await fetchLiveSourceNotices();\n  res.set("Cache-Control", "public, max-age=300, stale-while-revalidate=900");\n  return res.json(result);\n}));\n\napp.get("/api/v1/jobs", asyncRoute(async (req, res) => {
+app.get("/api/v1/jobs", asyncRoute(async (req, res) => {
   const page = Math.max(1, Number(req.query.page) || 1);
   const pageSize = Math.min(50, Math.max(1, Number(req.query.pageSize) || 20));
   const query = String(req.query.q ?? "").trim().slice(0, 100);
