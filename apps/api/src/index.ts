@@ -74,6 +74,7 @@ const jobInput = z.object({
   applicationStart: z.string().datetime().nullable().optional(), applicationEnd: z.string().datetime().nullable().optional(), examDate: z.string().datetime().nullable().optional(), location: z.array(z.string().max(100)).max(100).optional(), states: z.array(z.string().max(100)).max(100).optional(), departments: z.array(z.string().max(100)).max(100).optional(), jobType: z.string().max(80).nullable().optional(), exam: z.string().max(180).nullable().optional(),
   sourceUrl: httpUrl.nullable().optional(), sourceOrganization: z.string().max(180).nullable().optional(), notificationUrl: httpUrl.nullable().optional(), applicationUrl: httpUrl.nullable().optional(), notificationDate: z.string().datetime().nullable().optional(),
   qualifications: z.array(z.object({ qualification: z.string().min(1).max(100), degree: z.string().max(160).nullable().optional(), branch: z.string().max(160).nullable().optional(), minimumPassingYear: z.number().int().nullable().optional(), maximumPassingYear: z.number().int().nullable().optional(), minimumPercentage: z.number().min(0).max(100).nullable().optional(), notes: z.string().max(1000).nullable().optional() })).max(30).optional(),
+  vacancyCategories: z.array(z.object({ category: z.string().trim().min(1).max(60), postName: z.string().max(160).nullable().optional(), vacancy: z.number().int().nonnegative().nullable().optional(), gender: z.string().max(80).nullable().optional(), notes: z.string().max(1000).nullable().optional() })).max(100).optional(),
   documents: z.array(z.object({ documentName: z.string().trim().min(1).max(160), required: z.boolean().nullable().optional(), condition: z.string().max(1000).nullable().optional(), sourcePage: z.string().max(100).nullable().optional() })).max(50).optional(),
 });
 
@@ -170,7 +171,6 @@ app.get("/api/v1/jobs", asyncRoute(async (req, res) => {
     ...(jobType ? { jobType: { equals: jobType, mode: "insensitive" } } : {}),
     ...(exam ? { exam: { contains: exam, mode: "insensitive" } } : {}),
     ...(Number.isFinite(vacancyMin) && vacancyMin > 0 ? { vacancy: { gte: vacancyMin } } : {}),
-    ...(query ? { searchText: { contains: query, mode: "insensitive" } } : {}),
     ...(filters.length ? { AND: filters } : {}),
   };
   const jobs = await prisma.job.findMany({
@@ -368,6 +368,40 @@ app.post("/api/v1/me/notifications/:id/read", auth, verifyMutationOrigin, asyncR
   const notification = await prisma.notification.updateMany({ where: { id: req.params.id, userId: req.claims!.sub }, data: { readAt: new Date() } });
   if (!notification.count) return res.status(404).json({ error: "NOTIFICATION_NOT_FOUND" });
   return res.status(204).end();
+}));
+
+const sourceCronSecret = process.env.CRON_SECRET;
+app.post("/api/v1/internal/source-ingestion/run", asyncRoute(async (req, res) => {
+  if (!sourceCronSecret || req.header("x-cron-secret") !== sourceCronSecret) return res.status(401).json({ error: "UNAUTHORIZED" });
+  const configured = (process.env.SOURCE_INGESTION_URLS ?? "").split(",").map(item => item.trim()).filter(Boolean).map(item => {
+    const [sourceOrganization, sourceUrl] = item.split("|", 2);
+    return { sourceOrganization, sourceUrl };
+  }).filter(item => item.sourceOrganization && item.sourceUrl);
+  if (!configured.length) return res.status(422).json({ error: "SOURCE_INGESTION_NOT_CONFIGURED", message: "Set SOURCE_INGESTION_URLS as Organization|https://official-source.example." });
+  const results = [];
+  for (const source of configured.slice(0, 25)) {
+    const startedAt = new Date();
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15_000);
+      const response = await fetch(source.sourceUrl, { headers: { "User-Agent": "NaukriMitra-SourceMonitor/1.0 (+official-source-monitor)" }, signal: controller.signal });
+      clearTimeout(timeout);
+      const body = await response.text();
+      const contentHash = createHash("sha256").update(body).digest("hex");
+      const previous = await prisma.sourceSnapshot.findFirst({ where: { sourceUrl: source.sourceUrl, recordType: "SOURCE_PAGE" }, orderBy: { observedAt: "desc" } });
+      const changed = !previous || previous.contentHash !== contentHash;
+      const titleMatch = body.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+      const noticeTitle = (titleMatch?.[1] ?? source.sourceOrganization).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 180);
+      if (changed) await prisma.sourceSnapshot.create({ data: { sourceOrganization: source.sourceOrganization, sourceUrl: source.sourceUrl, noticeTitle, recordType: "SOURCE_PAGE", observedAt: startedAt, sourceKind: SourceKind.OFFICIAL, verificationStatus: VerificationStatus.REVIEW_REQUIRED, extractedFields: ["title", "contentHash"], unverifiedFields: ["recruitmentFields"], retrievalNote: "Automated source monitor detected a new page snapshot. Human review is required before publication.", contentHash, previousContentHash: previous?.contentHash ?? null, changeSummary: previous ? "Official source page content changed." : "Initial official source snapshot captured.", snapshot: { title: noticeTitle, status: response.status, text: body.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 30000) } } });
+      await prisma.sourceIngestionRun.create({ data: { sourceOrganization: source.sourceOrganization, sourceUrl: source.sourceUrl, finishedAt: new Date(), status: response.ok ? "SUCCESS" : "HTTP_ERROR", httpStatus: response.status, contentHash, changed } });
+      results.push({ ...source, status: response.ok ? "SUCCESS" : "HTTP_ERROR", changed, httpStatus: response.status });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown source fetch error";
+      await prisma.sourceIngestionRun.create({ data: { sourceOrganization: source.sourceOrganization, sourceUrl: source.sourceUrl, finishedAt: new Date(), status: "ERROR", errorMessage: message.slice(0, 500) } });
+      results.push({ ...source, status: "ERROR", error: message });
+    }
+  }
+  return res.json({ data: results });
 }));
 
 const reminderCronSecret = process.env.CRON_SECRET;
@@ -570,14 +604,15 @@ app.get("/api/v1/admin/jobs", auth, requireRole(...editors), asyncRoute(async (r
 app.post("/api/v1/admin/jobs", auth, requireRole(...editors), verifyMutationOrigin, asyncRoute(async (req, res) => {
   const parsed = jobInput.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "INVALID_INPUT", details: parsed.error.flatten() });
-  const { qualifications = [], documents = [], ...fields } = parsed.data;
+  const { qualifications = [], vacancyCategories = [], documents = [], ...fields } = parsed.data;
   const normalizedDates = { ageCutoffDate: fields.ageCutoffDate ? new Date(fields.ageCutoffDate) : null, applicationStart: fields.applicationStart ? new Date(fields.applicationStart) : null, applicationEnd: fields.applicationEnd ? new Date(fields.applicationEnd) : null, examDate: fields.examDate ? new Date(fields.examDate) : null, notificationDate: fields.notificationDate ? new Date(fields.notificationDate) : null };
   const recruitmentKey = buildRecruitmentKey({ organization: fields.organization, postName: fields.postName, notificationDate: normalizedDates.notificationDate, applicationEnd: normalizedDates.applicationEnd });
   if (recruitmentKey) {
     const duplicate = await prisma.job.findFirst({ where: { recruitmentKey, status: { not: "ARCHIVED" } }, select: { id: true, slug: true, status: true } });
     if (duplicate) return res.status(409).json({ error: "DUPLICATE_RECRUITMENT", message: "A similar recruitment already exists.", existing: duplicate });
   }
-  const job = await prisma.job.create({ data: { ...fields, ...normalizedDates, recruitmentKey: recruitmentKey || null, status: "DRAFT", verificationStatus: "UNVERIFIED", qualifications: { create: qualifications }, documents: { create: documents } } });
+  const searchText = [fields.organization, fields.postName, fields.exam ?? "", ...(fields.departments ?? []), ...(fields.states ?? []), ...(fields.location ?? []), ...qualifications.flatMap(item => [item.qualification, item.degree ?? "", item.branch ?? ""]), ...vacancyCategories.map(item => `${item.category} ${item.postName ?? ""}`)].join(" ").trim();
+  const job = await prisma.job.create({ data: { ...fields, ...normalizedDates, searchText, recruitmentKey: recruitmentKey || null, status: "DRAFT", verificationStatus: "UNVERIFIED", qualifications: { create: qualifications }, vacancyCategories: { create: vacancyCategories }, documents: { create: documents } } });
   await prisma.auditLog.create({ data: { actorId: req.claims!.sub, jobId: job.id, action: "JOB_CREATED", entityType: "Job", entityId: job.id } });
   return res.status(201).json({ data: job });
 }));
@@ -586,7 +621,7 @@ app.patch("/api/v1/admin/jobs/:id", auth, requireRole(...editors), verifyMutatio
   if (!parsed.success) return res.status(400).json({ error: "INVALID_INPUT", details: parsed.error.flatten() });
   const before = await prisma.job.findUnique({ where: { id: req.params.id } });
   if (!before) return res.status(404).json({ error: "JOB_NOT_FOUND" });
-  const { qualifications, documents, ...fields } = parsed.data;
+  const { qualifications, vacancyCategories, documents, ...fields } = parsed.data;
   const dateFields = ["ageCutoffDate", "applicationStart", "applicationEnd", "examDate", "notificationDate"] as const;
   const data: Record<string, unknown> = { ...fields };
   for (const field of dateFields) if (fields[field] !== undefined) data[field] = fields[field] ? new Date(fields[field]!) : null;
@@ -601,6 +636,8 @@ app.patch("/api/v1/admin/jobs/:id", auth, requireRole(...editors), verifyMutatio
     data.recruitmentKey = recruitmentKey;
   }
   if (qualifications) data.qualifications = { deleteMany: {}, create: qualifications };
+  if (vacancyCategories) data.vacancyCategories = { deleteMany: {}, create: vacancyCategories };
+  if (qualifications || vacancyCategories || fields.organization || fields.postName || fields.exam || fields.departments || fields.states || fields.location) data.searchText = [nextOrganization, nextPostName, fields.exam ?? before.exam ?? "", ...((fields.departments ?? before.departments) as string[]), ...((fields.states ?? before.states) as string[]), ...((fields.location ?? before.location) as string[]), ...(qualifications ?? before.qualifications.map(q => `${q.qualification} ${q.degree ?? ""} ${q.branch ?? ""}`)), ...((vacancyCategories ?? []).map(item => `${item.category} ${item.postName ?? ""}`))].join(" ").trim();
   if (documents) data.documents = { deleteMany: {}, create: documents };
   const updated = await prisma.$transaction(async tx => {
     const result = await tx.job.update({ where: { id: before.id }, data });
