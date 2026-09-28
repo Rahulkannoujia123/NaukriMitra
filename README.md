@@ -116,3 +116,16 @@ This is an implemented application scaffold, not a production launch by itself. 
 ## Run locally
 
 Requires Node.js 20+ and MongoDB (Atlas recommended; local MongoDB works for development). Copy `apps/api/.env.example` to `apps/api/.env` and `apps/web/.env.example` to `apps/web/.env.local`, set a rotated MongoDB connection URL and local secrets, then run `npm install`, `npm run db:generate`, and `npm run db:push`. Start frontend and API in separate terminals with `npm run dev` and `npm run dev:api`. Public registration creates normal users only. Do not commit `.env` files or share database credentials in chat. No fabricated database listings are included; enter only current, source-checked recruitment records.
+
+
+## Production-readiness improvements
+
+The latest reliability pass adds structured recruitment fields for application fee/exemptions, selection process, exam pattern, application mode, domicile/nationality/physical requirements, gender requirements, and category/post-wise vacancy data. Search now supports category and minimum-percentage filters and uses a normalized search-text field. Candidate eligibility supports percentage, gender, category age-relaxation lookup, and manual review flags for domicile/nationality/physical conditions.
+
+Official-source monitoring is now automated behind `POST /api/v1/internal/source-ingestion/run`. Configure `CRON_SECRET` and `SOURCE_INGESTION_URLS` as comma-separated `Organization|URL` entries. The monitor fetches the configured official pages, hashes their content, records changed snapshots, and keeps them review-required; it never auto-publishes recruitment data. The existing reminder cron remains available at `POST /api/v1/internal/reminders/run` and creates in-app notifications.
+
+Source snapshots now retain content hashes and change metadata. This supports a review workflow for corrigenda/updates instead of treating every changed deadline as a new recruitment. Recruitment fingerprints no longer use the application end date, so a corrigendum that changes only the deadline can remain associated with the same recruitment.
+
+A deterministic recommendation endpoint is available at `GET /api/v1/me/recommendations`. It combines recorded eligibility, preferred location/department, and salary preference, while preserving manual-review status rather than guessing.
+
+Automated API tests cover key eligibility cases. Run `npm test` after dependencies are installed. Before deployment, run `npm run db:generate`, `npm run db:push`, and `npm test`. MongoDB deployments used with Prisma's transaction/nested-write paths should use a replica set/Atlas deployment.
