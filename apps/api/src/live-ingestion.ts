@@ -4,8 +4,7 @@ import { fetchLiveSourceNotices } from "./live-sources";
 
 const prisma = new PrismaClient();
 
-export async function ingestLiveSourceSnapshots() {
-  const result = await fetchLiveSourceNotices();
+export async function ingestLiveSourceSnapshots(result = await fetchLiveSourceNotices()) {
   const observedAt = new Date(result.fetchedAt);
   let imported = 0;
 
