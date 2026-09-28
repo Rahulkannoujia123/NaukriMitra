@@ -1,0 +1,27 @@
+name: Scheduled maintenance
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+jobs:
+  maintenance:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Monitor official sources
+        env:
+          API_URL: ${{ secrets.API_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          test -n "$API_URL"
+          test -n "$CRON_SECRET"
+          curl --fail-with-body -sS -X POST "$API_URL/api/v1/internal/source-ingestion/run" -H "x-cron-secret: $CRON_SECRET"
+      - name: Process deadline reminders
+        env:
+          API_URL: ${{ secrets.API_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          test -n "$API_URL"
+          test -n "$CRON_SECRET"
+          curl --fail-with-body -sS -X POST "$API_URL/api/v1/internal/reminders/run" -H "x-cron-secret: $CRON_SECRET"
