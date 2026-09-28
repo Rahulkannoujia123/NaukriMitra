@@ -6,6 +6,14 @@ type LiveSource = {
   title: string;
   link: string;
   publishedAt: string | null;
+  vacancy?: number | null;
+  qualification?: string | null;
+  ageLimit?: string | null;
+  applicationStart?: string | null;
+  lastDate?: string | null;
+  examDate?: string | null;
+  notificationUrl?: string | null;
+  applicationUrl?: string | null;
   source: "OFFICIAL";
 };
 
@@ -95,15 +103,45 @@ const clean = (value: string) => decodeHtml(value
 const isUsefulNotice = (title: string, link: string) =>
   /(recruit|vacanc|career|notification|advertisement|recruitment|exam|admit|result|apply|selection|post|job|employment|notice|hiring|opening)/i.test(title + " " + link);
 
+const parseDate = (value: string) => {
+  const m = value.match(/\\b(\\d{1,2}[\\/-]\\d{1,2}[\\/-]\\d{4}|\\d{1,2}[\\s-](?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[\\s-]\\d{4}|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[\\s-]\\d{1,2}[\\s,]+\\d{4})\\b/i);
+  return m?.[1] ?? null;
+};
+
+const parseDetails = (context: string, link: string, title: string) => {
+  const text = clean(context);
+  const all = text + " " + title;
+  const vacancyMatch = all.match(/(?:total\\s+)?vacanc(?:y|ies)\\s*[:=-]?\\s*([\\d,]+)/i) || all.match(/\\b([\\d,]+)\\s+(?:posts?|vacancies)\\b/i);
+  const qualificationMatch = all.match(/(?:qualification|educational\\s+qualification)\\s*[:=-]?\\s*([^|;]{3,180})/i);
+  const ageMatch = all.match(/(?:age\\s+limit|age)\\s*[:=-]?\\s*(.{3,100}?)(?=\\s+(?:as\\s+on|qualification|vacanc|last\\s+date|application)|$)/i);
+  const startMatch = all.match(/(?:application|online\\s+application)[^|;]{0,80}?(?:start(?:s|ed)?|begin(?:s|ning)?)\\s*(?:on)?\\s*[:=-]?\\s*(\\d{1,2}[\\/-]\\d{1,2}[\\/-]\\d{4})/i);
+  const lastMatch = all.match(/(?:last\\s+date|closing\\s+date|apply\\s+online\\s+till|last\\s+date\\s+to\\s+apply)\\s*[:=-]?\\s*([^|;]{6,40})/i);
+  const examMatch = all.match(/(?:exam(?:ination)?\\s+date|date\\s+of\\s+(?:computer\\s+based\\s+)?exam(?:ination)?)\\s*[:=-]?\\s*([^|;]{6,40})/i);
+  const notificationUrl = /\\.(?:pdf)(?:[?#].*)?$/i.test(link) ? link : null;
+  const applicationUrl = /(apply|registration|application|candidate-portal)/i.test(link) ? link : null;
+  const normalize = (value: string | null) => value ? value.replace(/\\s+/g, " ").trim() : null;
+  return {
+    vacancy: vacancyMatch ? Number(vacancyMatch[1].replace(/,/g, "")) : null,
+    qualification: normalize(qualificationMatch?.[1] ?? null),
+    ageLimit: normalize(ageMatch?.[1] ?? null),
+    applicationStart: parseDate(startMatch?.[1] ?? all.match(/(?:application\\s+from|opening\\s+date)\\s*[:=-]?\\s*(.{6,25})/i)?.[1] ?? "") ,
+    lastDate: normalize(lastMatch?.[1] ?? null),
+    examDate: normalize(examMatch?.[1] ?? null),
+    notificationUrl,
+    applicationUrl,
+  };
+};
+
 const extractLinks = (html: string, source: SourceConfig): LiveSource[] => {
   const results: LiveSource[] = [];
   const seen = new Set<string>();
   const baseUrl = source.feedUrl || source.url;
 
-  const add = (href: string, rawTitle: string) => {
+  const add = (href: string, rawTitle: string, context = "") => {
     const link = absoluteUrl(baseUrl, href);
     const title = clean(rawTitle);
     if (!link || title.length < 8 || !isUsefulNotice(title, link)) return;
+    const details = parseDetails(context, link, title);
     const key = link + "|" + title;
     if (seen.has(key)) return;
     seen.add(key);
@@ -114,7 +152,8 @@ const extractLinks = (html: string, source: SourceConfig): LiveSource[] => {
       url: source.url,
       title,
       link,
-      publishedAt: null,
+      publishedAt: parseDate(context),
+      ...details,
       source: "OFFICIAL",
     });
   };
@@ -122,7 +161,9 @@ const extractLinks = (html: string, source: SourceConfig): LiveSource[] => {
   const anchorPattern = /<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
   let match: RegExpExecArray | null;
   while ((match = anchorPattern.exec(html)) && results.length < 50) {
-    add(match[1], match[2]);
+    const start = Math.max(0, match.index - 1200);
+    const end = Math.min(html.length, match.index + match[0].length + 1200);
+    add(match[1], match[2], html.slice(start, end));
   }
 
   return results;
