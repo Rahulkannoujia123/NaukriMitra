@@ -33,12 +33,12 @@ type Claims = { sub: string; role: Role };
 type AuthRequest = Request & { claims?: Claims };
 const hashToken = (value: string) => createHash("sha256").update(value).digest("hex");
 const refreshCookieOptions = { httpOnly: true, secure: production, sameSite: "strict" as const, path: "/api/v1/auth", maxAge: 30 * 24 * 60 * 60 * 1000 };
-const accessJwt = (user: { id: string; role: Role }) => jwt.sign({ sub: user.id, role: user.role }, accessSecret ?? "local-only-access-secret", { expiresIn: "10m", issuer: "naukrisetu-api", audience: "naukrisetu-web" });
-const refreshJwt = (user: { id: string; role: Role }) => jwt.sign({ sub: user.id, role: user.role, nonce: randomBytes(24).toString("hex") }, refreshSecret ?? "local-only-refresh-secret", { expiresIn: "30d", issuer: "naukrisetu-api", audience: "naukrisetu-refresh" });
+const accessJwt = (user: { id: string; role: Role }) => jwt.sign({ sub: user.id, role: user.role }, accessSecret ?? "local-only-access-secret", { expiresIn: "10m", issuer: "naukrimitra-api", audience: "naukrimitra-web" });
+const refreshJwt = (user: { id: string; role: Role }) => jwt.sign({ sub: user.id, role: user.role, nonce: randomBytes(24).toString("hex") }, refreshSecret ?? "local-only-refresh-secret", { expiresIn: "30d", issuer: "naukrimitra-api", audience: "naukrimitra-refresh" });
 const auth = (req: AuthRequest, res: Response, next: NextFunction) => {
   const header = req.header("authorization");
   if (!header?.startsWith("Bearer ")) return res.status(401).json({ error: "AUTH_REQUIRED" });
-  try { req.claims = jwt.verify(header.slice(7), accessSecret ?? "local-only-access-secret", { issuer: "naukrisetu-api", audience: "naukrisetu-web" }) as Claims; next(); }
+  try { req.claims = jwt.verify(header.slice(7), accessSecret ?? "local-only-access-secret", { issuer: "naukrimitra-api", audience: "naukrimitra-web" }) as Claims; next(); }
   catch { return res.status(401).json({ error: "INVALID_SESSION" }); }
 };
 const requireRole = (...roles: Role[]) => (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -105,7 +105,7 @@ app.post("/api/v1/auth/refresh", verifyMutationOrigin, asyncRoute(async (req, re
   const token = req.cookies.ns_refresh as string | undefined;
   if (!token) return res.status(401).json({ error: "INVALID_SESSION" });
   let claims: Claims;
-  try { claims = jwt.verify(token, refreshSecret ?? "local-only-refresh-secret", { issuer: "naukrisetu-api", audience: "naukrisetu-refresh" }) as Claims; }
+  try { claims = jwt.verify(token, refreshSecret ?? "local-only-refresh-secret", { issuer: "naukrimitra-api", audience: "naukrimitra-refresh" }) as Claims; }
   catch { res.clearCookie("ns_refresh", refreshCookieOptions); return res.status(401).json({ error: "INVALID_SESSION" }); }
   const stored = await prisma.refreshToken.findUnique({ where: { tokenHash: hashToken(token) } });
   if (!stored || stored.revokedAt || stored.expiresAt <= new Date() || stored.userId !== claims.sub) { res.clearCookie("ns_refresh", refreshCookieOptions); return res.status(401).json({ error: "INVALID_SESSION" }); }
@@ -226,13 +226,13 @@ app.post("/api/v1/assistant", asyncRoute(async (req, res) => {
     try {
       const aiResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${openRouterKey}`, "HTTP-Referer": process.env.SITE_URL ?? webOrigin, "X-Title": "NaukriSetu" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${openRouterKey}`, "HTTP-Referer": process.env.SITE_URL ?? webOrigin, "X-Title": "NaukriMitra" },
         body: JSON.stringify({
           model: process.env.OPENROUTER_MODEL ?? "openai/gpt-4o-mini",
           temperature: 0.2,
           max_tokens: 350,
           messages: [
-            { role: "system", content: "You are NaukriSetu's job assistant. Use ONLY the supplied database records. Never invent vacancies, dates, eligibility, salary, organizations, or links. If the records do not establish something, say it is not available and tell the user to check the official notification. Answer concisely in the user's language when possible." },
+            { role: "system", content: "You are NaukriMitra's job assistant. Use ONLY the supplied database records. Never invent vacancies, dates, eligibility, salary, organizations, or links. If the records do not establish something, say it is not available and tell the user to check the official notification. Answer concisely in the user's language when possible." },
             { role: "user", content: JSON.stringify({ question: parsed.data.message, records: data.map(item => ({ organization: item.organization, postName: item.postName, applicationEnd: item.applicationEnd, matchedTerms: item.matchedTerms, verificationStatus: item.verificationStatus, sourceOrganization: item.sourceOrganization })) }) }
           ]
         })
@@ -391,7 +391,7 @@ app.post("/api/v1/internal/source-ingestion/run", asyncRoute(async (req, res) =>
       const previous = await prisma.sourceSnapshot.findFirst({ where: { sourceUrl: source.sourceUrl, recordType: "SOURCE_PAGE" }, orderBy: { observedAt: "desc" } });
       const changed = !previous || previous.contentHash !== contentHash;
       const titleMatch = body.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-      const noticeTitle = (titleMatch?.[1] ?? source.sourceOrganization).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 180);
+      const noticeTitle = `${(titleMatch?.[1] ?? source.sourceOrganization).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 160)} [${contentHash.slice(0, 8)}]`;
       if (changed) await prisma.sourceSnapshot.create({ data: { sourceOrganization: source.sourceOrganization, sourceUrl: source.sourceUrl, noticeTitle, recordType: "SOURCE_PAGE", observedAt: startedAt, sourceKind: SourceKind.OFFICIAL, verificationStatus: VerificationStatus.REVIEW_REQUIRED, extractedFields: ["title", "contentHash"], unverifiedFields: ["recruitmentFields"], retrievalNote: "Automated source monitor detected a new page snapshot. Human review is required before publication.", contentHash, previousContentHash: previous?.contentHash ?? null, changeSummary: previous ? "Official source page content changed." : "Initial official source snapshot captured.", snapshot: { title: noticeTitle, status: response.status, text: body.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 30000) } } });
       await prisma.sourceIngestionRun.create({ data: { sourceOrganization: source.sourceOrganization, sourceUrl: source.sourceUrl, finishedAt: new Date(), status: response.ok ? "SUCCESS" : "HTTP_ERROR", httpStatus: response.status, contentHash, changed } });
       results.push({ ...source, status: response.ok ? "SUCCESS" : "HTTP_ERROR", changed, httpStatus: response.status });
@@ -619,7 +619,7 @@ app.post("/api/v1/admin/jobs", auth, requireRole(...editors), verifyMutationOrig
 app.patch("/api/v1/admin/jobs/:id", auth, requireRole(...editors), verifyMutationOrigin, asyncRoute(async (req, res) => {
   const parsed = jobInput.partial().safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "INVALID_INPUT", details: parsed.error.flatten() });
-  const before = await prisma.job.findUnique({ where: { id: req.params.id } });
+  const before = await prisma.job.findUnique({ where: { id: req.params.id }, include: { qualifications: true, vacancyCategories: true } });
   if (!before) return res.status(404).json({ error: "JOB_NOT_FOUND" });
   const { qualifications, vacancyCategories, documents, ...fields } = parsed.data;
   const dateFields = ["ageCutoffDate", "applicationStart", "applicationEnd", "examDate", "notificationDate"] as const;
@@ -690,5 +690,5 @@ app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
 });
 
 const port = Number(process.env.API_PORT ?? 4000);
-app.listen(port, () => console.log(`NaukriSetu API listening on ${port}`));
+app.listen(port, () => console.log(`NaukriMitra API listening on ${port}`));
 process.on("SIGTERM", async () => { await prisma.$disconnect(); process.exit(0); });
