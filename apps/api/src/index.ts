@@ -127,7 +127,7 @@ app.get("/api/v1/me", auth, asyncRoute(async (req, res) => {
   if (!user) return res.status(404).json({ error: "USER_NOT_FOUND" });
   return res.json({ user });
 }));
-const profileInput = z.object({ dateOfBirth: z.string().datetime().nullable().optional(), gender: z.string().max(40).nullable().optional(), state: z.string().max(100).nullable().optional(), district: z.string().max(100).nullable().optional(), qualification: z.string().max(100).nullable().optional(), degree: z.string().max(160).nullable().optional(), branch: z.string().max(160).nullable().optional(), passingYear: z.number().int().min(1940).max(2100).nullable().optional(), category: z.string().max(60).nullable().optional(), experienceMonths: z.number().int().min(0).max(1200).nullable().optional(), preferredDepartments: z.array(z.string().max(100)).max(50).optional(), preferredLocations: z.array(z.string().max(100)).max(50).optional(), salaryMin: z.number().int().nonnegative().nullable().optional() });
+const profileInput = z.object({ dateOfBirth: z.string().datetime().nullable().optional(), gender: z.string().max(40).nullable().optional(), state: z.string().max(100).nullable().optional(), district: z.string().max(100).nullable().optional(), qualification: z.string().max(100).nullable().optional(), degree: z.string().max(160).nullable().optional(), branch: z.string().max(160).nullable().optional(), passingYear: z.number().int().min(1940).max(2100).nullable().optional(), percentage: z.number().min(0).max(100).nullable().optional(), category: z.string().max(60).nullable().optional(), experienceMonths: z.number().int().min(0).max(1200).nullable().optional(), preferredDepartments: z.array(z.string().max(100)).max(50).optional(), preferredLocations: z.array(z.string().max(100)).max(50).optional(), salaryMin: z.number().int().nonnegative().nullable().optional() });
 app.patch("/api/v1/me/profile", auth, verifyMutationOrigin, asyncRoute(async (req, res) => {
   const parsed = profileInput.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "INVALID_INPUT", details: parsed.error.flatten() });
@@ -204,10 +204,7 @@ app.post("/api/v1/assistant", asyncRoute(async (req, res) => {
   const terms = [...new Set(message.match(/[a-z0-9]{2,}/g) ?? [])].filter(term => !stopWords.has(term));
   const now = new Date();
   const candidates = await prisma.job.findMany({
-    where: {
-      status: "PUBLISHED",
-      ...(closingIntent ? { applicationEnd: { gte: now, lte: new Date(now.getTime() + 7 * 86_400_000) } } : {}),
-    },
+    where: activeJobWhere(closingIntent ? { applicationEnd: { gte: now, lte: new Date(now.getTime() + 7 * 86_400_000) } } : {}),
     include: { qualifications: { select: { qualification: true, degree: true, branch: true } } },
     orderBy: [{ applicationEnd: "asc" }, { publishedAt: "desc" }],
     take: 300,
