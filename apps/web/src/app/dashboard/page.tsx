@@ -93,7 +93,7 @@ export default function DashboardPage() {
   const profile = user?.profile ?? {};
   const value = (key: string) => typeof profile[key] === "string" || typeof profile[key] === "number" ? String(profile[key]) : "";
   return <main>
-    <header className="header"><div className="container header-in"><a className="brand" href="/"><span className="brand-mark">N</span><span>Naukri<span style={{ color: "#087b69" }}>Setu</span></span></a><button className="btn btn-light" onClick={logout}><LogOut size={15}/> Sign out</button></div></header>
+    <header className="header"><div className="container header-in"><a className="brand" href="/"><span className="brand-mark">N</span><span>Naukri<span style={{ color: "#087b69" }}>Mitra</span></span></a><button className="btn btn-light" onClick={logout}><LogOut size={15}/> Sign out</button></div></header>
     <div className="container dashboard-page">
       <div className="dashboard-title"><div><span className="eyebrow dark"><UserRound size={14}/> PERSONAL DASHBOARD</span><h1>{user ? `Welcome, ${user.email.split("@")[0]}` : "Loading your dashboard…"}</h1><p>Build your profile to get relevant job matches.</p></div></div>
       {error && <div className="form-error" role="alert">{error}</div>}{notice && <div className="success-note" role="status">{notice}</div>}
