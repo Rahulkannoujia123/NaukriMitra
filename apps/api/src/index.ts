@@ -331,6 +331,40 @@ app.delete("/api/v1/me/reminders/:jobId", auth, verifyMutationOrigin, asyncRoute
   return res.status(204).end();
 }));
 
+app.get("/api/v1/me/notifications", auth, asyncRoute(async (req, res) => {
+  const notifications = await prisma.notification.findMany({ where: { userId: req.claims!.sub }, orderBy: { createdAt: "desc" }, take: 50 });
+  return res.json({ data: notifications });
+}));
+app.post("/api/v1/me/notifications/:id/read", auth, verifyMutationOrigin, asyncRoute(async (req, res) => {
+  const notification = await prisma.notification.updateMany({ where: { id: req.params.id, userId: req.claims!.sub }, data: { readAt: new Date() } });
+  if (!notification.count) return res.status(404).json({ error: "NOTIFICATION_NOT_FOUND" });
+  return res.status(204).end();
+}));
+
+const reminderCronSecret = process.env.CRON_SECRET;
+app.post("/api/v1/internal/reminders/run", asyncRoute(async (req, res) => {
+  if (!reminderCronSecret || req.header("x-cron-secret") !== reminderCronSecret) return res.status(401).json({ error: "UNAUTHORIZED" });
+  const now = new Date();
+  const reminders = await prisma.reminder.findMany({
+    where: { enabled: true, sentAt: null, job: { status: "PUBLISHED", applicationEnd: { not: null, gt: now } } },
+    include: { job: { select: { id: true, postName: true, organization: true, applicationEnd: true } } },
+    take: 500,
+  });
+  const due = reminders.filter(reminder => {
+    const deadline = reminder.job.applicationEnd!;
+    const offsetMs = reminder.offset === ReminderOffset.DAYS_7 ? 7 * 86_400_000 : reminder.offset === ReminderOffset.DAYS_3 ? 3 * 86_400_000 : reminder.offset === ReminderOffset.DAYS_1 ? 86_400_000 : 0;
+    const target = new Date(deadline.getTime() - offsetMs);
+    return now >= target && now < new Date(target.getTime() + 86_400_000);
+  });
+  for (const reminder of due) {
+    await prisma.$transaction([
+      prisma.notification.create({ data: { userId: reminder.userId, title: "Job deadline reminder", body: `${reminder.job.postName} at ${reminder.job.organization} closes on ${reminder.job.applicationEnd!.toISOString()}.` } }),
+      prisma.reminder.update({ where: { id: reminder.id }, data: { sentAt: now } }),
+    ]);
+  }
+  return res.json({ processed: due.length });
+}));
+
 async function listJobUpdates(res: Response, types: UpdateType[]) {
   const updates = await prisma.jobUpdate.findMany({
     where: { type: { in: types }, publishedAt: { not: null }, job: { status: "PUBLISHED" } },
